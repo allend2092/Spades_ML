@@ -33,6 +33,17 @@ class CardDeck:
         for key in self.cards.keys():
             self.cards[key] = card_values[key - 1]
 
+    def deal_cards(self, players, cards_per_player):
+        for _ in range(cards_per_player):
+            for player in players:
+                if self.cards:
+                    # Get the first card key and its value
+                    card_key, card_value = next(iter(self.cards.items()))
+                    # Add the card to the player's hand
+                    player.hand.append(card_value)
+                    # Remove the card from the deck
+                    del self.cards[card_key]
+
 
 
  # define a scoreboard class that keeps track of the score and other information
@@ -120,7 +131,7 @@ def how_many_points():
 class Player:
     def __init__(self, name):
         # data member team: variable stating if this bot is a user teammate or opponent
-        #self.team = team
+        self.team = None
         # data member name: variable storing the name of the bot
         self.name = name
         # data member hand: list storing the cards that the bot has in its hand
@@ -137,13 +148,24 @@ class Player:
         """
         raise NotImplementedError()
 
+    def set_team(self, team_name):
+       self.team = team_name
+
+
 
 
 class HumanPlayer(Player):
     def __init__(self, name):
         super().__init__(name)
 
-        # Additional initialization for HumanPlayer
+    def display_cards_in_hand(self):
+        if not self.hand:
+            print("No cards in hand.")
+            return
+
+        print(f"{self.name}'s cards:")
+        for i, card in enumerate(self.hand, start=1):
+            print(f"{i}. {card[0]} of {card[1]}")
 
 class BotPlayer(Player):
     def __init__(self, name, difficulty_level):
@@ -174,6 +196,7 @@ def main_game_loop(players):
         for player in players:
             if isinstance(player, HumanPlayer):
                 # Human player actions (e.g., make a bid, play a card)
+                player.display_cards_in_hand()
                 action = input("What do you want to do? ")
                 if action == 'end':
                     game_over = True
@@ -184,6 +207,29 @@ def main_game_loop(players):
             # Other game logic (e.g., determine winner of a trick)
         # Check for end of game conditions
 
+
+def assign_teams(players):
+    # Shuffle the players list
+    random.shuffle(players)
+
+    # Initialize two teams
+    team1 = []
+    team2 = []
+
+    # Assign players to teams
+    for i, player in enumerate(players):
+        if i % 2 == 0:
+            team1.append(player)
+        else:
+            team2.append(player)
+
+    for player in team1:
+        player.set_team("Team 1")
+
+    for player in team2:
+        player.set_team("Team 2")
+
+    return team1, team2
 
 # Define a main function that instantiates the card deck and runs the print cards function
 def main():
@@ -202,6 +248,8 @@ def main():
     deck.shuffle_cards()
     deck.print_cards()
     players = create_players(game_parameters.ai_opponents)
+    assign_teams(players)
+    deck.deal_cards(players, 13)
 
 
     # Main game loop
