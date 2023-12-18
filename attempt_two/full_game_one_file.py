@@ -5,15 +5,6 @@ This is a text based game of spades. As of Dec 17th, 2023 this version does work
 I built this game so I could train the AI players using deep learning with an Nvidia GPU. 
 
 """
-
-"""
-Author: Daryl
-
-This is a text based game of spades. As of Dec 17th, 2023 this version does work and allow the user to play through multiple hands, make a bid and has functional AI. This is the foundation for a deep learning neural net project.
-I built this game so I could train the AI players using deep learning with an Nvidia GPU. I had some assistance writing this code using chatGPT
-
-"""
-
 import random
 
 # Define suits and ranks for the cards
