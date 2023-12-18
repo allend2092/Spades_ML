@@ -2,6 +2,14 @@
 Author: Daryl
 
 This is a text based game of spades. As of Dec 17th, 2023 this version does work and allow the user to play through multiple hands, make a bid and has functional AI. This is the foundation for a deep learning neural net project. 
+I built this game so I could train the AI players using deep learning with an Nvidia GPU. 
+
+"""
+
+"""
+Author: Daryl
+
+This is a text based game of spades. As of Dec 17th, 2023 this version does work and allow the user to play through multiple hands, make a bid and has functional AI. This is the foundation for a deep learning neural net project.
 I built this game so I could train the AI players using deep learning with an Nvidia GPU. I had some assistance writing this code using chatGPT
 
 """
@@ -50,17 +58,17 @@ class Scoreboard:
     def __init__(self, team_name, opponent_name):
         self.team_name = team_name
         self.opponent_name = opponent_name
-        self.team_score = 0
-        self.opponent_score = 0
+        self.team1_overall_score = 0
+        self.team2_overall_score = 0
         self.round_number = 0
 
     def calculate_score(self, team1_bid, team2_bid, team1_tricks, team2_tricks):
         # Calculate and update scores for both teams
-        team1_score = self.calculate_team_score(team1_bid, team1_tricks)
-        team2_score = self.calculate_team_score(team2_bid, team2_tricks)
-        self.team_score += team1_score
-        self.opponent_score += team2_score
-        return team1_score, team2_score
+        team1_hand_score = self.calculate_team_score(team1_bid, team1_tricks)
+        team2_hand_score = self.calculate_team_score(team2_bid, team2_tricks)
+        self.team1_overall_score += team1_hand_score
+        self.team2_overall_score += team2_hand_score
+        return team1_hand_score, team2_hand_score
 
     def calculate_team_score(self, bid, tricks):
         # Helper function to calculate score for a team
@@ -121,7 +129,7 @@ class Player:
         self.score = 0
         self.card_played_last = None
         self.eligible_cards = []
-        print(f"Hello, I am {self.name}. I am currently not assigned to a team.")
+        # print(f"Hello, I am {self.name}. I am currently not assigned to a team.")
 
     def make_bid(self, bids):
         raise NotImplementedError()
@@ -242,13 +250,13 @@ def create_players(num_human_players, total_players=4):
     players = []
     for i in range(num_human_players):
         players.append(HumanPlayer(f"Human {i + 1}"))
-        print("appended a human player")
+        # print("appended a human player")
     for i in range(total_players - num_human_players):
         players.append(BotPlayer(f"Bot {i + 1}", 'hard'))
-        print("appended a bot player")
+        # print("appended a bot player")
     dealer_index = random.randint(0, total_players - 1)
     dealer = players[dealer_index]
-    print(f"{dealer.name} is the dealer.")
+    # print(f"{dealer.name} is the dealer.")
     return players, dealer
 
 # Function to determine the winning card and team
@@ -279,7 +287,7 @@ def rotate_dealer(players, current_dealer):
 
 # Function to check if the game has reached the end
 def check_end_of_game(scoreboard, winning_score):
-    return scoreboard.team_score >= winning_score or scoreboard.opponent_score >= winning_score
+    return scoreboard.team1_overall_score >= winning_score or scoreboard.team2_overall_score >= winning_score
 
 def arrange_players(players, dealer):
     # Find the index of the dealer
@@ -345,7 +353,7 @@ def main_game_loop(players, game_parameters, dealer, deck):
                 else:
                     player.determine_eligible_cards(game_parameters.leading_suit, game_parameters.spades_broken)
                 card_played = player.play_card(game_parameters.leading_suit, game_parameters.spades_broken)
-                print(card_played)
+                # print(card_played)
                 print(f"{player.name} of team {player.team} played {card_played}")
                 if first_card_played:
                     game_parameters.leading_suit = card_played[1]
@@ -378,7 +386,7 @@ def main_game_loop(players, game_parameters, dealer, deck):
         # Check if the game has reached the winning score
         if check_end_of_game(scoreboard, game_parameters.threshold_score):
             print("Game Over")
-            print(f"Final Score - Team 1: {scoreboard.team_score}, Team 2: {scoreboard.opponent_score}")
+            print(f"Final Score - Team 1: {scoreboard.team1_overall_score}, Team 2: {scoreboard.team2_overall_score}")
             game_over = True
         else:
             # Reset for the next round
@@ -418,10 +426,10 @@ def main():
 
     # Generate players based on the number of humans playing the game
     players, dealer = create_players(game_parameters.number_of_players)
-    print(f"dealer: {dealer}")
+    # print(f"dealer: {dealer}")
 
     ordered_players = arrange_players(players, dealer)
-    print(f"ordered_players: {ordered_players}")
+    # print(f"ordered_players: {ordered_players}")
 
     # Assign game players and humans to a team based on the number of humans to bots
     assign_teams(ordered_players)
@@ -435,4 +443,6 @@ def main():
 # Call the main function
 if __name__ == "__main__":
     main()
+
+
 
