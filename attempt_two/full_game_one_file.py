@@ -4,6 +4,7 @@ import random
 suits = ["Spades", "Hearts", "Diamonds", "Clubs"]
 ranks = ["Ace", "2", "3", "4", "5", "6", "7", "8", "9", "10", "Jack", "Queen", "King"]
 
+
 # Define a card deck object with a dictionary inside
 class CardDeck:
     def __init__(self):
@@ -45,8 +46,7 @@ class CardDeck:
                     del self.cards[card_key]
 
 
-
- # define a scoreboard class that keeps track of the score and other information
+# define a scoreboard class that keeps track of the score and other information
 class Scoreboard:
     def __init__(self, team_name, opponent_name):
         # data member team_name: variable storing the name of the user's team
@@ -85,7 +85,7 @@ def welcome():
 l  `  '  !|   [_ |     T/   \_ |     ||   |   ||   [_       |  |  |     |     /  \ ||  |   |  _  ||     ||   [_ /  \ | __ 
  \      / |     T|     |\     |l     !|   |   ||     T      |  |  l     !     \    ||  |   |  |  ||     ||     T\    ||  T
   \_/\_/  l_____jl_____j \____j \___/ l___j___jl_____j      l__j   \___/       \___jl__j   l__j__jl_____jl_____j \___jl__j
-                                                                                                                          
+
     ''')
 
 
@@ -98,8 +98,9 @@ def start_game():
  /  \ |  |  |  |  _  ||    \  |  |   |  | |  |  ||  l_ |    |  l_ ||  _  ||   |   ||   [_  __ 
  \    |  |  |  |  |  ||  .  Y |  |   j  l |  |  ||     |    |     ||  |  ||   |   ||     T|  T
   \___j  l__j  l__j__jl__j\_j l__j  |____jl__j__jl___,_j    l___,_jl__j__jl___j___jl_____jl__j
-                                                                                              
+
     ''')
+
 
 def how_many_players():
     # Ask the user for the number of human players
@@ -158,7 +159,7 @@ class Player:
         raise NotImplementedError()
 
     def set_team(self, team_name):
-       self.team = team_name
+        self.team = team_name
 
     def play_card(self):
         "logic for how to play a card should be inserted here."
@@ -169,12 +170,12 @@ class Player:
 
     def determine_eligible_cards(self, leading_suit, spades_broken):
         self.eligible_cards = []
-        print(f"leading_suit: {leading_suit}")
-        print(f"Spades Broken: {spades_broken}")
+        #print(f"leading_suit: {leading_suit}")
+        #print(f"Spades Broken: {spades_broken}")
 
         # Check if the player has cards of the leading suit
         has_leading_suit = any(card[1] == leading_suit for card in self.hand)
-        print(f"Has Leading suit: {has_leading_suit}")
+        #print(f"Has Leading suit: {has_leading_suit}")
 
         if has_leading_suit:
             # Player must play a card of the leading suit
@@ -191,12 +192,10 @@ class Player:
             self.eligible_cards = self.hand.copy()
 
 
-
-
-
 class HumanPlayer(Player):
     def __init__(self, name):
         super().__init__(name)
+
     def display_cards_in_hand(self):
         if not self.hand:
             print("No cards in hand.")
@@ -240,8 +239,6 @@ class HumanPlayer(Player):
             except ValueError:
                 print("Please enter a valid number.")
 
-
-
     def play_card(self, leading_suit, spades_broken):
         self.determine_eligible_cards(leading_suit, spades_broken)
 
@@ -249,7 +246,7 @@ class HumanPlayer(Player):
         print(f"Complete hand: {hand_cards_str}")
 
         # Format and display the eligible cards
-        eligible_cards_str = ", ".join(f"{i+1}. {card[0]} of {card[1]}" for i, card in enumerate(self.eligible_cards))
+        eligible_cards_str = ", ".join(f"{i + 1}. {card[0]} of {card[1]}" for i, card in enumerate(self.eligible_cards))
         print(f"Eligible cards to play: {eligible_cards_str}")
 
         while True:
@@ -264,6 +261,7 @@ class HumanPlayer(Player):
                     print("Invalid choice. Please choose a valid card number.")
             except ValueError:
                 print("Please enter a number.")
+
 
 class BotPlayer(Player):
     def __init__(self, name, difficulty_level):
@@ -313,16 +311,13 @@ class BotPlayer(Player):
             return chosen_card
 
 
-
-
-
 def create_players(num_human_players, total_players=4):
     players = []
     for i in range(num_human_players):
-        players.append(HumanPlayer(f"Human {i+1}"))
+        players.append(HumanPlayer(f"Human {i + 1}"))
         print("appended a human player")
     for i in range(total_players - num_human_players):
-        players.append(BotPlayer(f"Bot {i+1}", 'hard'))
+        players.append(BotPlayer(f"Bot {i + 1}", 'hard'))
         print("appended a bot player")
     # Randomly select a dealer
     dealer_index = random.randint(0, total_players - 1)
@@ -334,24 +329,28 @@ def create_players(num_human_players, total_players=4):
 
 def determine_winning_card_and_team(current_hand):
     # Define the order of ranks
-    rank_order = {"2": 2, "3": 3, "4": 4, "5": 5, "6": 6, "7": 7, "8": 8, "9": 9, "10": 10, "Jack": 11, "Queen": 12, "King": 13, "Ace": 14}
+    rank_order = {"2": 2, "3": 3, "4": 4, "5": 5, "6": 6, "7": 7, "8": 8, "9": 9, "10": 10, "Jack": 11, "Queen": 12,
+                  "King": 13, "Ace": 14}
 
     # Determine the suit of the first card played (leading suit)
     leading_suit = current_hand[0][1][1]  # (player, (rank, suit))
 
-    # Filter cards that match the leading suit and sort by rank
+    # Check if any Spades are played in the hand
+    spades_in_hand = [(player, card) for player, card in current_hand if card[1] == "Spades"]
+    spades_in_hand.sort(key=lambda x: rank_order[x[1][0]], reverse=True)
+
+    # If Spades are played, the highest Spade wins
+    if spades_in_hand:
+        return spades_in_hand[0]
+
+    # If no Spades are played, consider cards of the leading suit
     valid_cards = [(player, card) for player, card in current_hand if card[1] == leading_suit]
     valid_cards.sort(key=lambda x: rank_order[x[1][0]], reverse=True)
 
-    # Check for spades if no card matches the leading suit
-    if not valid_cards:
-        valid_cards = [(player, card) for player, card in current_hand if card[1] == "Spades"]
-        valid_cards.sort(key=lambda x: rank_order[x[1][0]], reverse=True)
-
     # The first card in sorted valid_cards is the winning card
-    winning_card = valid_cards[0] if valid_cards else current_hand[0]
+    return valid_cards[0] if valid_cards else current_hand[0]
 
-    return winning_card
+
 
 def assign_tricks_to_team(current_hand, winning_card, team1_tricks, team2_tricks):
     winning_player = winning_card[0]
@@ -428,18 +427,20 @@ def main_game_loop(players, game_parameters):
             # Assign the tricks to the winning team
             assign_tricks_to_team(current_hand, winning_card, team1_tricks, team2_tricks)
 
+            # Reorder players so that the winning player leads the next hand
+            winning_player_index = players.index(winning_card[0])
+            players = players[winning_player_index:] + players[:winning_player_index]
+
             # Reset the leading suit for the next hand
             game_parameters.leading_suit = None
-
 
         # Rotate the dealer for the next hand
         dealer = rotate_dealer(ordered_players, dealer)
         ordered_players = arrange_players(ordered_players, dealer)
         game_parameters.spades_broken = False
 
-
-            # Store the winning hand in the appropriate team's tricks
-            # ...
+        # Store the winning hand in the appropriate team's tricks
+        # ...
 
         # Calculate and display scores
         # ...
@@ -448,8 +449,6 @@ def main_game_loop(players, game_parameters):
         # ...
 
         # Additional code for end of game
-
-
 
 
 def assign_teams(players):
@@ -487,28 +486,26 @@ def arrange_players(players, dealer):
     return ordered_players
 
 
-
 # Define a main function that instantiates the card deck and runs the print cards function
 def main():
-
     welcome()
-    human_players = 1 # how_many_players()
-    points = 200 # how_many_points()
+    human_players = 1  # how_many_players()
+    points = 200  # how_many_points()
     start_game()
 
-    game_parameters = game_conditions(human_players= human_players, bot_players= 4-human_players, winning_score= points)
+    game_parameters = game_conditions(human_players=human_players, bot_players=4 - human_players, winning_score=points)
 
     # Create a card deck object
     deck = CardDeck()
 
     # Print the cards in the deck. This is for diagnostic purposes
-    #deck.print_cards()
+    # deck.print_cards()
 
     # Shuffle the deck prior to starting the game
     deck.shuffle_cards()
 
     # Print the deck again as a demonstration that the deck shuffle worked. this is a diagnostic
-    #deck.print_cards()
+    # deck.print_cards()
 
     # Generate players based on the number of humans playing the game
     players, dealer = create_players(game_parameters.number_of_players)
@@ -523,7 +520,6 @@ def main():
     # give each player their cards for the first hand
     deck.deal_cards(orderd_players, 13)
 
-
     # Main game loop. Begin the game loop
     main_game_loop(orderd_players, game_parameters)
 
@@ -531,7 +527,6 @@ def main():
 # Call the main function
 if __name__ == "__main__":
     main()
-
 
 
 
