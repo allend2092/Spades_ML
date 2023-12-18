@@ -71,6 +71,9 @@ class game_conditions:
         self.whose_turn = {}
         self.team1_bid = None
         self.team2_bid = None
+        self.game_play_order = []
+        self.leading_suit = None
+        self.spades_broken = False
 
 
 def welcome():
@@ -141,6 +144,7 @@ class Player:
         # data member score: variable storing the number of tricks that the bot has won
         self.score = 0
         self.card_played_last = None
+        self.eligible_cards = []
         # Print greeting upon instantiation
         print(f"Hello, I am {self.name}. I am currently not assigned to a team.")
 
@@ -162,6 +166,30 @@ class Player:
 
     def announce_myself(self):
         print(f"I am {self.name} and I'm on team {self.team}.")
+
+    def determine_eligible_cards(self, leading_suit, spades_broken):
+        self.eligible_cards = []
+        print(f"leading_suit: {leading_suit}")
+        print(f"Spades Broken: {spades_broken}")
+
+        # Check if the player has cards of the leading suit
+        has_leading_suit = any(card[1] == leading_suit for card in self.hand)
+        print(f"Has Leading suit: {has_leading_suit}")
+
+        if has_leading_suit:
+            # Player must play a card of the leading suit
+            self.eligible_cards = [card for card in self.hand if card[1] == leading_suit]
+        elif leading_suit == None and not spades_broken:
+            # Player can play any card including spades if they don't have the leading suit
+            self.eligible_cards = self.hand.copy()
+
+            # If spades haven't been broken and the player has other suits, remove spades from eligible cards
+            if not spades_broken and any(card[1] != "Spades" for card in self.hand):
+                self.eligible_cards = [card for card in self.eligible_cards if card[1] != "Spades"]
+        else:
+            # Player can play any card including spades if they don't have the leading suit
+            self.eligible_cards = self.hand.copy()
+
 
 
 
@@ -212,18 +240,28 @@ class HumanPlayer(Player):
             except ValueError:
                 print("Please enter a valid number.")
 
-    def play_card(self):
-        self.display_cards_in_hand()
+
+
+    def play_card(self, leading_suit, spades_broken):
+        self.determine_eligible_cards(leading_suit, spades_broken)
+
+        hand_cards_str = ", ".join(f"{i + 1}. {card[0]} of {card[1]}" for i, card in enumerate(self.hand))
+        print(f"Complete hand: {hand_cards_str}")
+
+        # Format and display the eligible cards
+        eligible_cards_str = ", ".join(f"{i+1}. {card[0]} of {card[1]}" for i, card in enumerate(self.eligible_cards))
+        print(f"Eligible cards to play: {eligible_cards_str}")
+
         while True:
             try:
-                chosen_card = int(input("Choose a card to play (1-13): "))
-                if 1 <= chosen_card <= len(self.hand):
-                    self.hand.pop(chosen_card - 1)
-                    #print(self.hand[chosen_card - 1])
-                    self.card_played_last = self.hand[chosen_card - 1]
-                    return self.hand[chosen_card - 1]
+                chosen_index = int(input("Choose a card to play (by number): ")) - 1
+                if 0 <= chosen_index < len(self.eligible_cards):
+                    chosen_card = self.eligible_cards.pop(chosen_index)
+                    self.card_played_last = chosen_card
+                    self.hand.remove(chosen_card)  # Remove the chosen card from the hand
+                    return chosen_card
                 else:
-                    print("Invalid card number. Please choose a valid card.")
+                    print("Invalid choice. Please choose a valid card number.")
             except ValueError:
                 print("Please enter a number.")
 
@@ -253,10 +291,28 @@ class BotPlayer(Player):
 
         return bid
 
-    def play_card(self):
-        chosen_card = self.hand.pop(random.randint(0, len(self.hand) - 1))
-        self.card_played_last = chosen_card
-        return chosen_card
+    def play_card(self, leading_suit, spades_broken):
+        self.determine_eligible_cards(leading_suit, spades_broken)
+
+        hand_cards_str = ", ".join(f"{i + 1}. {card[0]} of {card[1]}" for i, card in enumerate(self.hand))
+        print(f"Complete hand: {hand_cards_str}")
+
+        # Format and display the eligible cards
+        eligible_cards_str = ", ".join(f"{i + 1}. {card[0]} of {card[1]}" for i, card in enumerate(self.eligible_cards))
+        print(f"Eligible cards to play: {eligible_cards_str}")
+
+        if self.eligible_cards:
+            chosen_card = random.choice(self.eligible_cards)
+            self.card_played_last = chosen_card
+            self.hand.remove(chosen_card)  # Remove the chosen card from the hand
+            return chosen_card
+        else:
+            # Fallback in case no eligible cards (should not happen in a standard game)
+            chosen_card = self.hand.pop()
+            self.card_played_last = chosen_card
+            return chosen_card
+
+
 
 
 
@@ -268,7 +324,12 @@ def create_players(num_human_players, total_players=4):
     for i in range(total_players - num_human_players):
         players.append(BotPlayer(f"Bot {i+1}", 'hard'))
         print("appended a bot player")
-    return players
+    # Randomly select a dealer
+    dealer_index = random.randint(0, total_players - 1)
+    dealer = players[dealer_index]
+    print(f"{dealer.name} is the dealer.")
+
+    return players, dealer
 
 
 def determine_winning_card_and_team(current_hand):
@@ -300,6 +361,13 @@ def assign_tricks_to_team(current_hand, winning_card, team1_tricks, team2_tricks
         team2_tricks.extend(current_hand)
 
 
+def rotate_dealer(players, current_dealer):
+    dealer_index = players.index(current_dealer)
+    new_dealer_index = (dealer_index + 1) % len(players)
+    new_dealer = players[new_dealer_index]
+    return new_dealer
+
+
 def main_game_loop(players, game_parameters):
     game_over = False
     current_bids = {}
@@ -329,15 +397,46 @@ def main_game_loop(players, game_parameters):
 
         for _ in range(13):  # Play 13 hands
             current_hand = []
-            for player in players:
-                card_played = player.play_card()
-                print(f"{player.name} of team {player.team} played {player.card_played_last}")
-                current_hand.append((player, card_played))
-                # Determine the winning card and player
-                winning_card = determine_winning_card_and_team(current_hand)
+            first_card_played = True
 
-                # Assign the tricks to the winning team
-                assign_tricks_to_team(current_hand, winning_card, team1_tricks, team2_tricks)
+            for player in players:
+                if first_card_played:
+                    # For the first player in the hand, determine eligible cards without a leading suit
+                    player.determine_eligible_cards(None, game_parameters.spades_broken)
+                else:
+                    # For subsequent players, use the current leading suit
+                    player.determine_eligible_cards(game_parameters.leading_suit, game_parameters.spades_broken)
+
+                card_played = player.play_card(game_parameters.leading_suit, game_parameters.spades_broken)
+                print(card_played)
+                print(f"{player.name} of team {player.team} played {card_played}")
+
+                if first_card_played:
+                    # Set the leading suit based on the first card played
+                    game_parameters.leading_suit = card_played[1]
+                    first_card_played = False
+
+                if card_played[1] == 'Spades':
+                    game_parameters.spades_broken = True
+
+                current_hand.append((player, card_played))
+
+            # Determine the winning card and player
+            winning_card = determine_winning_card_and_team(current_hand)
+            print(f"Winning card is {winning_card[1]}. \n\nNext round....\n\n")
+
+            # Assign the tricks to the winning team
+            assign_tricks_to_team(current_hand, winning_card, team1_tricks, team2_tricks)
+
+            # Reset the leading suit for the next hand
+            game_parameters.leading_suit = None
+
+
+        # Rotate the dealer for the next hand
+        dealer = rotate_dealer(ordered_players, dealer)
+        ordered_players = arrange_players(ordered_players, dealer)
+        game_parameters.spades_broken = False
+
 
             # Store the winning hand in the appropriate team's tricks
             # ...
@@ -378,11 +477,22 @@ def assign_teams(players):
 
     return team1, team2
 
+
+def arrange_players(players, dealer):
+    # Find the index of the dealer
+    dealer_index = players.index(dealer)
+
+    # Arrange players starting from the left of the dealer
+    ordered_players = players[dealer_index + 1:] + players[:dealer_index + 1]
+    return ordered_players
+
+
+
 # Define a main function that instantiates the card deck and runs the print cards function
 def main():
 
     welcome()
-    human_players = 1# how_many_players()
+    human_players = 1 # how_many_players()
     points = 200 # how_many_points()
     start_game()
 
@@ -392,26 +502,30 @@ def main():
     deck = CardDeck()
 
     # Print the cards in the deck. This is for diagnostic purposes
-    deck.print_cards()
+    #deck.print_cards()
 
-    # Shuffel the deck prior to starting the game
+    # Shuffle the deck prior to starting the game
     deck.shuffle_cards()
 
     # Print the deck again as a demonstration that the deck shuffle worked. this is a diagnostic
-    deck.print_cards()
+    #deck.print_cards()
 
     # Generate players based on the number of humans playing the game
-    players = create_players(game_parameters.number_of_players)
+    players, dealer = create_players(game_parameters.number_of_players)
+    print(f"dealer: {dealer}")
+
+    orderd_players = arrange_players(players, dealer)
+    print(f"orderd_players: {orderd_players}")
 
     # Assign game players and humans to a team based on the number of humans to bots
-    assign_teams(players)
+    assign_teams(orderd_players)
 
     # give each player their cards for the first hand
-    deck.deal_cards(players, 13)
+    deck.deal_cards(orderd_players, 13)
 
 
     # Main game loop. Begin the game loop
-    main_game_loop(players, game_parameters)
+    main_game_loop(orderd_players, game_parameters)
 
 
 # Call the main function
