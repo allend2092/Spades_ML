@@ -11,6 +11,7 @@ import pickle
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import os
 
 class BidNet(nn.Module):
     def __init__(self):
@@ -103,6 +104,11 @@ class Scoreboard:
             score -= 10 * bid
         return score
 
+    def reset(self):
+        self.team1_overall_score = 0
+        self.team2_overall_score = 0
+        self.round_number = 0
+
 # game_conditions class stores the state and rules of the game
 class game_conditions:
     def __init__(self, human_players, bot_players, winning_score):
@@ -153,6 +159,7 @@ class Player:
         self.score = 0
         self.card_played_last = None
         self.eligible_cards = []
+        self.bot = None
         # print(f"Hello, I am {self.name}. I am currently not assigned to a team.")
 
     def card_to_number(self, card):
@@ -245,6 +252,7 @@ class Player:
 class HumanPlayer(Player):
     def __init__(self, name):
         super().__init__(name)
+        self.bot = False
 
     def display_cards_in_hand(self, vector):
         if not self.hand:
@@ -302,6 +310,27 @@ class BotPlayer(Player):
         self.difficulty_level = difficulty_level
         self.bid_net = bid_net
         self.play_card_net = play_card_net
+        self.bid_game_vector = [] # instantiated so that I can carry the game vector to different scopes of program
+        self.play_card_game_vector = []
+        self.bot = True
+        self.card_i_played = None
+        self.bid_i_made = None
+        self.reward = 0
+        self.memory = []
+        self.optimizer = torch.optim.Adam(self.play_card_net.parameters(), lr=0.001)
+        # Check for existing model and load it
+        self.load_model_if_exists()
+
+    def load_model_if_exists(self):
+        # Construct the expected filename
+        model_filename = f'{self.name}_play_card_net.pth'
+
+        # Check if the file exists in the current directory
+        if model_filename in os.listdir():
+            print(f"Loading saved model for {self.name}")
+            self.play_card_net.load_state_dict(torch.load(model_filename))
+        else:
+            print(f"No saved model found for {self.name}, starting with a new model.")
 
     # def make_bid(self, bids, vector):
     #     print(vector)
@@ -321,6 +350,7 @@ class BotPlayer(Player):
     #     return bid
 
     def make_bid(self, bids, vector):
+        self.bid_game_vector = vector
         #print(vector)
         # Convert vector to PyTorch tensor and move to GPU
         vector_tensor = torch.tensor(vector, dtype=torch.float).to(device)
@@ -330,8 +360,10 @@ class BotPlayer(Player):
             bid_output = self.bid_net(vector_tensor)
 
         # Convert NN output to a valid bid (example: scale and round)
-        bid = round(bid_output.item() * 13)  # Scale to range 0-13
-        return max(1, min(bid, 13))  # Ensure bid is within valid range
+        unrestricted_NN_bid = round(bid_output.item() * 13)  # Scale to range 0-13
+        restricted_NN_bid = max(1, min(unrestricted_NN_bid, 13))  # Ensure bid is within valid range
+        self.bid_i_made = restricted_NN_bid
+        return restricted_NN_bid
 
     # def play_card(self, leading_suit, spades_broken, vector):
     #     # Bot player selects a card to play
@@ -346,6 +378,7 @@ class BotPlayer(Player):
     #         self.card_played_last = chosen_card
     #         return chosen_card
     def play_card(self, leading_suit, spades_broken, vector):
+        self.play_card_game_vector = vector
         self.determine_eligible_cards(leading_suit, spades_broken)
 
         # Convert vector to tensor and pass to the network
@@ -372,6 +405,38 @@ class BotPlayer(Player):
         self.card_played_last = chosen_card
         self.hand.remove(chosen_card)
         return chosen_card
+
+    def play_card_reward_nn(self, current_hand, winning_card, team1_tricks, team2_tricks):
+        #print(winning_card)
+        reward = 0
+        if winning_card[0].name == self.name:
+            reward += 50
+        else:
+            reward += -30
+        if winning_card[0].team == self.team:
+            reward += 50
+        else:
+            reward += -30
+        self.reward = reward
+        return reward
+
+    def train_network(self):
+        for self.play_card_game_vector, self.card_played_last, self.reward in self.memory:
+            state_tensor = torch.tensor(self.play_card_game_vector, dtype=torch.float).to(device)
+            action_tensor = torch.tensor(self.card_played_last, dtype=torch.long).to(device)
+            reward_tensor = torch.tensor(self.reward, dtype=torch.float).to(device)
+
+            # Forward pass
+            predicted_action_probabilities = self.play_card_net(state_tensor)
+            predicted_reward = predicted_action_probabilities[self.card_played_last]
+
+            # Compute loss (e.g., mean squared error between predicted_reward and actual reward)
+            loss = F.mse_loss(predicted_reward, reward_tensor)
+
+            # Backward pass and optimize
+            self.optimizer.zero_grad()
+            loss.backward()
+            self.optimizer.step()
 
 
 # Function to create players for the game
@@ -454,101 +519,137 @@ def assign_teams(players):
 
 # Main game loop function
 def main_game_loop(players, game_parameters, dealer, deck):
-    game_over = False
+    num_episodes = 50
     current_bids = {}
     team1_tricks = []
     team2_tricks = []
     scoreboard = Scoreboard("Team 1", "Team 2")
-    game_state_and_player_vector = []
 
+    for episode in range(num_episodes):
+        game_over = False
+        total_reward = 0
 
-    while not game_over:
-        for player in players:
-            # Vectorize the game state before the bots make a decision
-            game_state_and_player_vector = vectorize_game_state(game_over, scoreboard, current_bids, team1_tricks,
-                         team2_tricks, 0, player, players)
-            # print(f'This is the vector: {game_state_and_player_vector}')
-            bid = player.make_bid(current_bids, game_state_and_player_vector)
-            game_state_and_player_vector = []
-            if bid is not None:
-                current_bids[player.name] = bid
-            else:
-                game_over = True
-                break
-        team1_total_bid = sum(current_bids[player.name] for player in players if player.team == "Team 1")
-        team2_total_bid = sum(current_bids[player.name] for player in players if player.team == "Team 2")
-        game_parameters.team1_bid = max(4, team1_total_bid)
-        game_parameters.team2_bid = max(4, team2_total_bid)
-        print(f"Team 1 Bid: {game_parameters.team1_bid}")
-        print(f"Team 2 Bid: {game_parameters.team2_bid}")
-        for i in range(13):
-            current_hand = []
-            first_card_played = True
+        while not game_over:
             for player in players:
-                if first_card_played:
-                    player.determine_eligible_cards(None, game_parameters.spades_broken)
-                else:
-                    player.determine_eligible_cards(game_parameters.leading_suit, game_parameters.spades_broken)
                 # Vectorize the game state before the bots make a decision
                 game_state_and_player_vector = vectorize_game_state(game_over, scoreboard, current_bids, team1_tricks,
-                                                                    team2_tricks, 0, player, players)
+                             team2_tricks, 0, player, players)
+                #print(game_state_and_player_vector)
+                # print(f'This is the vector: {game_state_and_player_vector}')
+                bid = player.make_bid(current_bids, game_state_and_player_vector)
+                game_state_and_player_vector.clear()
+                if bid is not None:
+                    current_bids[player.name] = bid
+                else:
+                    game_over = True
+                    break
+            team1_total_bid = sum(current_bids[player.name] for player in players if player.team == "Team 1")
+            team2_total_bid = sum(current_bids[player.name] for player in players if player.team == "Team 2")
+            game_parameters.team1_bid = max(4, team1_total_bid)
+            game_parameters.team2_bid = max(4, team2_total_bid)
+            print(f"Team 1 Bid: {game_parameters.team1_bid}")
+            print(f"Team 2 Bid: {game_parameters.team2_bid}")
+            for i in range(13):
+                current_hand = []
+                first_card_played = True
+                for player in players:
+                    if first_card_played:
+                        player.determine_eligible_cards(None, game_parameters.spades_broken)
+                    else:
+                        player.determine_eligible_cards(game_parameters.leading_suit, game_parameters.spades_broken)
+                    # Vectorize the game state before the bots make a decision
+                    game_state_and_player_vector = vectorize_game_state(game_over, scoreboard, current_bids, team1_tricks,
+                                                                        team2_tricks, 0, player, players)
 
-                card_played = player.play_card(game_parameters.leading_suit, game_parameters.spades_broken,
-                                               game_state_and_player_vector)
-                game_state_and_player_vector = []
-                # print(card_played)
-                print(f"{player.name} of team {player.team} played {card_played}")
-                if first_card_played:
-                    game_parameters.leading_suit = card_played[1]
-                    first_card_played = False
-                if card_played[1] == 'Spades':
-                    game_parameters.spades_broken = True
-                current_hand.append((player, card_played))
-            winning_card = determine_winning_card_and_team(current_hand)
-            print(f"Winning card is {winning_card[1]}. \n\nNext round....\n\n")
-            # Assign the tricks to the winning team
-            assign_tricks_to_team(current_hand, winning_card, team1_tricks, team2_tricks)
+                    card_played = player.play_card(game_parameters.leading_suit, game_parameters.spades_broken,
+                                                   game_state_and_player_vector)
+                    game_state_and_player_vector.clear()
+                    # print(card_played)
+                    print(f"{player.name} of team {player.team} played {card_played}")
+                    if first_card_played:
+                        game_parameters.leading_suit = card_played[1]
+                        first_card_played = False
+                    if card_played[1] == 'Spades':
+                        game_parameters.spades_broken = True
+                    current_hand.append((player, card_played))
+                winning_card = determine_winning_card_and_team(current_hand)
+                print(f"Winning card is {winning_card[1]}. Winning player is {winning_card[0].name}."
+                      f" Winning Team {winning_card[0].team}"
+                      f" \n\nNext round....\n\n")
+                # Assign the tricks to the winning team
+                assign_tricks_to_team(current_hand, winning_card, team1_tricks, team2_tricks)
 
-            # Reorder players so that the winning player leads the next hand
-            winning_player_index = players.index(winning_card[0])
-            players = players[winning_player_index:] + players[:winning_player_index]
+                # Reorder players so that the winning player leads the next hand
+                winning_player_index = players.index(winning_card[0])
+                players = players[winning_player_index:] + players[:winning_player_index]
 
-            # Reset the leading suit for the next hand
-            game_parameters.leading_suit = None
+                # card playing NN reward function
+                for player in players:
+                    if player.bot:
+                        player.play_card_reward_nn(current_hand, winning_card, team1_tricks, team2_tricks)
+                        player.train_network()
 
-        # Rotate the dealer for the next hand
-        dealer = rotate_dealer(players, dealer)
-        players = arrange_players(players, dealer)
-        game_parameters.spades_broken = False
 
-        # Calculate and update scores after 13 hands
-        team1_score, team2_score = scoreboard.calculate_score(game_parameters.team1_bid, game_parameters.team2_bid,
-                                                              team1_tricks, team2_tricks)
-        print(f"Round Score - Team 1: {team1_score}, Team 2: {team2_score}")
+                # Reset the leading suit for the next hand
+                game_parameters.leading_suit = None
 
-        # Check if the game has reached the winning score
-        if check_end_of_game(scoreboard, game_parameters.threshold_score):
-            print("Game Over")
-            print(f"Final Score - Team 1: {scoreboard.team1_overall_score}, Team 2: {scoreboard.team2_overall_score}")
-            game_over = True
-        else:
-            # Reset for the next round
-            team1_tricks.clear()
-            team2_tricks.clear()
-            current_bids.clear()
-
-            # Create a card deck object
-            deck = CardDeck()
-
-            # Shuffle and deal new cards for the next round
-            deck.shuffle_cards()
-
-            # Rotate the dealer for the next round
+            # Rotate the dealer for the next hand
             dealer = rotate_dealer(players, dealer)
             players = arrange_players(players, dealer)
-            # give each player their cards
-            deck.deal_cards(players, 13)
             game_parameters.spades_broken = False
+
+            # Calculate and update scores after 13 hands
+            team1_score, team2_score = scoreboard.calculate_score(game_parameters.team1_bid, game_parameters.team2_bid,
+                                                                  team1_tricks, team2_tricks)
+            print(f"Round Score - Team 1: {team1_score}, Team 2: {team2_score}")
+
+            # Check if the game has reached the winning score
+            if check_end_of_game(scoreboard, game_parameters.threshold_score):
+                print("Game Over")
+                print(f"Final Score - Team 1: {scoreboard.team1_overall_score}, Team 2: {scoreboard.team2_overall_score}")
+                game_over = True
+                # Reset for the next game. This allows for multiple games so that NN learning can occur
+                # Eventually, you should try to fit this into a reset_game()  # Start a new game
+                team1_tricks.clear()
+                team2_tricks.clear()
+                current_bids.clear()
+
+                # Create a card deck object
+                deck = CardDeck()
+
+                # Shuffle and deal new cards for the next round
+                deck.shuffle_cards()
+
+                # Rotate the dealer for the next round
+                dealer = rotate_dealer(players, dealer)
+                players = arrange_players(players, dealer)
+                # give each player their cards
+                deck.deal_cards(players, 13)
+                game_parameters.spades_broken = False
+                scoreboard.reset()
+            else:
+                # Reset for the next round
+                team1_tricks.clear()
+                team2_tricks.clear()
+                current_bids.clear()
+
+                # Create a card deck object
+                deck = CardDeck()
+
+                # Shuffle and deal new cards for the next round
+                deck.shuffle_cards()
+
+                # Rotate the dealer for the next round
+                dealer = rotate_dealer(players, dealer)
+                players = arrange_players(players, dealer)
+                # give each player their cards
+                deck.deal_cards(players, 13)
+                game_parameters.spades_broken = False
+    # save trained NNs
+    if episode == num_episodes - 1:
+        # Save the model's state dictionary
+        for player in players:
+            torch.save(player.play_card_net.state_dict(), f'{player.name}_play_card_net.pth')
 
 
 def one_hot_encode_round(current_round_number):
