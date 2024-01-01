@@ -8,6 +8,25 @@ I built this game so I could train the AI players using deep learning with an Nv
 
 import random
 import pickle
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+class BidNet(nn.Module):
+    def __init__(self):
+        super(BidNet, self).__init__()
+        self.fc1 = nn.Linear(in_features=51, out_features=128)  # Adjust in_features based on vector size
+        self.fc2 = nn.Linear(128, 64)
+        self.fc3 = nn.Linear(64, 1)
+
+    def forward(self, x):
+        x = F.relu(self.fc1(x))
+        x = F.relu(self.fc2(x))
+        x = torch.sigmoid(self.fc3(x))  # Sigmoid to get a value between 0 and 1
+        return x
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+bid_net = BidNet().to(device)
 
 # Define suits and ranks for the cards
 suits = ["Spades", "Hearts", "Diamonds", "Clubs"]
@@ -124,7 +143,7 @@ class Player:
         self.eligible_cards = []
         # print(f"Hello, I am {self.name}. I am currently not assigned to a team.")
 
-    def card_to_number(card):
+    def card_to_number(self, card):
         suit_order = {"Spades": 0, "Hearts": 1, "Diamonds": 2, "Clubs": 3}
         rank_order = {"Ace": 1, "2": 2, "3": 3, "4": 4, "5": 5, "6": 6, "7": 7, "8": 8, "9": 9, "10": 10, "Jack": 11,
                       "Queen": 12, "King": 13}
@@ -140,30 +159,52 @@ class Player:
         card_number = suit_number * 13 + rank_number
         return card_number
 
+    def vectorize_hand(self):
+        # Convert each card in hand to its numerical representation
+        hand_vector = [self.card_to_number(card) for card in self.hand]
+
+        # Pad the vector with zeros if there are less than 13 cards in hand
+        hand_vector.extend([0] * (13 - len(self.hand)))
+
+        return hand_vector
+
+    def vectorize_eligible_cards(self):
+        # Convert each eligible card to its numerical representation
+        eligible_cards_vector = [self.card_to_number(card) for card in self.eligible_cards]
+
+        # Pad the vector with zeros if there are less than 13 eligible cards
+        eligible_cards_vector.extend([0] * (13 - len(self.eligible_cards)))
+
+        return eligible_cards_vector
+
     def vectorize_player(self):
         vector = []
         # Example: Convert team to a number (0 for Team 1, 1 for Team 2)
         team_number = 0 if self.team == 'Team 1' else 1
+        print(team_number)
         vector.append(team_number)
 
         # Convert hand to numbers (assuming a function card_to_number exists)
-        hand_vector = [self.card_to_number(card) for card in self.hand]
+        hand_vector = self.vectorize_hand()
+        print(hand_vector)
         vector.extend(hand_vector)
 
         # Add score
         vector.append(self.score)
+        print(self.score)
 
         # Convert last played card to a number
         # last_card_number = self.card_to_number(self.card_played_last) if self.card_played_last else -1
         # vector.append(last_card_number)
 
         # Convert eligible cards to numbers
-        eligible_cards_vector = [self.card_to_number(card) for card in self.eligible_cards]
+        eligible_cards_vector = self.vectorize_eligible_cards()
         vector.extend(eligible_cards_vector)
+        print(eligible_cards_vector)
 
         return vector
 
-    def make_bid(self, bids):
+    def make_bid(self, bids, vector):
         raise NotImplementedError()
 
     def set_team(self, team_name):
@@ -193,7 +234,7 @@ class HumanPlayer(Player):
     def __init__(self, name):
         super().__init__(name)
 
-    def display_cards_in_hand(self):
+    def display_cards_in_hand(self, vector):
         if not self.hand:
             print("No cards in hand.")
             return
@@ -201,7 +242,7 @@ class HumanPlayer(Player):
         card_str = ", ".join(f"{card[0]} of {card[1]}" for card in self.hand)
         print(f"{self.name}'s cards: {card_str}")
 
-    def make_bid(self, bids):
+    def make_bid(self, bids, vector):
         # Human player makes a bid
         while True:
             print(f"Current bids: {bids}")
@@ -222,7 +263,7 @@ class HumanPlayer(Player):
             except ValueError:
                 print("Please enter a valid number.")
 
-    def play_card(self, leading_suit, spades_broken):
+    def play_card(self, leading_suit, spades_broken, vector):
         # Human player selects a card to play
         self.determine_eligible_cards(leading_suit, spades_broken)
         hand_cards_str = ", ".join(f"{i + 1}. {card[0]} of {card[1]}" for i, card in enumerate(self.hand))
@@ -244,27 +285,42 @@ class HumanPlayer(Player):
 
 # BotPlayer class represents a bot player in the game
 class BotPlayer(Player):
-    def __init__(self, name, difficulty_level):
+    def __init__(self, name, difficulty_level, bid_net):
         super().__init__(name)
         self.difficulty_level = difficulty_level
+        self.bid_net = bid_net
 
-    def make_bid(self, bids):
-        # Bot player makes a bid based on a simple strategy
-        bid = 0
-        suit_counts = {"Hearts": 0, "Diamonds": 0, "Clubs": 0, "Spades": 0}
-        for card in self.hand:
-            rank, suit = card
-            suit_counts[suit] += 1
-            if rank in ["Ace", "King"]:
-                bid += 1
-        for suit, count in suit_counts.items():
-            if suit != "Spades" and count == 1:
-                if any(spade[0] not in ["Ace", "King"] for spade in self.hand if spade[1] == "Spades"):
-                    bid += 1
-                    break
-        return bid
+    # def make_bid(self, bids, vector):
+    #     print(vector)
+    #     # Bot player makes a bid based on a simple strategy
+    #     bid = 0
+    #     suit_counts = {"Hearts": 0, "Diamonds": 0, "Clubs": 0, "Spades": 0}
+    #     for card in self.hand:
+    #         rank, suit = card
+    #         suit_counts[suit] += 1
+    #         if rank in ["Ace", "King"]:
+    #             bid += 1
+    #     for suit, count in suit_counts.items():
+    #         if suit != "Spades" and count == 1:
+    #             if any(spade[0] not in ["Ace", "King"] for spade in self.hand if spade[1] == "Spades"):
+    #                 bid += 1
+    #                 break
+    #     return bid
 
-    def play_card(self, leading_suit, spades_broken):
+    def make_bid(self, bids, vector):
+        print(vector)
+        # Convert vector to PyTorch tensor and move to GPU
+        vector_tensor = torch.tensor(vector, dtype=torch.float).to(device)
+
+        # Get bid from neural network
+        with torch.no_grad():
+            bid_output = self.bid_net(vector_tensor)
+
+        # Convert NN output to a valid bid (example: scale and round)
+        bid = round(bid_output.item() * 13)  # Scale to range 0-13
+        return max(1, min(bid, 13))  # Ensure bid is within valid range
+
+    def play_card(self, leading_suit, spades_broken, vector):
         # Bot player selects a card to play
         self.determine_eligible_cards(leading_suit, spades_broken)
         if self.eligible_cards:
@@ -284,7 +340,7 @@ def create_players(num_human_players, total_players=4):
         players.append(HumanPlayer(f"Human {i + 1}"))
         # print("appended a human player")
     for i in range(total_players - num_human_players):
-        players.append(BotPlayer(f"Bot {i + 1}", 'hard'))
+        players.append(BotPlayer(f"Bot {i + 1}", 'hard', bid_net))
         # print("appended a bot player")
     dealer_index = random.randint(0, total_players - 1)
     dealer = players[dealer_index]
@@ -362,9 +418,17 @@ def main_game_loop(players, game_parameters, dealer, deck):
     team1_tricks = []
     team2_tricks = []
     scoreboard = Scoreboard("Team 1", "Team 2")
+    game_state_and_player_vector = []
+
+
     while not game_over:
         for player in players:
-            bid = player.make_bid(current_bids)
+            # Vectorize the game state before the bots make a decision
+            game_state_and_player_vector = vectorize_game_state(game_over, scoreboard, current_bids, team1_tricks,
+                         team2_tricks, 0, player, players)
+            # print(f'This is the vector: {game_state_and_player_vector}')
+            bid = player.make_bid(current_bids, game_state_and_player_vector)
+            game_state_and_player_vector = []
             if bid is not None:
                 current_bids[player.name] = bid
             else:
@@ -384,7 +448,13 @@ def main_game_loop(players, game_parameters, dealer, deck):
                     player.determine_eligible_cards(None, game_parameters.spades_broken)
                 else:
                     player.determine_eligible_cards(game_parameters.leading_suit, game_parameters.spades_broken)
-                card_played = player.play_card(game_parameters.leading_suit, game_parameters.spades_broken)
+                # Vectorize the game state before the bots make a decision
+                game_state_and_player_vector = vectorize_game_state(game_over, scoreboard, current_bids, team1_tricks,
+                                                                    team2_tricks, 0, player, players)
+
+                card_played = player.play_card(game_parameters.leading_suit, game_parameters.spades_broken,
+                                               game_state_and_player_vector)
+                game_state_and_player_vector = []
                 # print(card_played)
                 print(f"{player.name} of team {player.team} played {card_played}")
                 if first_card_played:
@@ -455,25 +525,32 @@ def vectorize_game_state(game_over, scoreboard, current_bids, team1_tricks,
                          team2_tricks, current_round_number, player, players):
     # Vectorizing game_over
     game_over_vector = [1 if game_over else 0]
+    print(game_over_vector)
 
     # Vectorizing scoreboard
     scoreboard_vector = [scoreboard.team1_overall_score, scoreboard.team2_overall_score, scoreboard.round_number]
+    print(game_over_vector)
 
     # Vectorizing current bids
     bids_vector = [current_bids.get(p.name, 0) for p in players]  # Assuming 'players' is accessible
+    print(game_over_vector)
 
     # Vectorizing team tricks
     team_tricks_vector = [len(team1_tricks), len(team2_tricks)]
+    print(game_over_vector)
 
     # Vectorizing current hand
     current_round_number_vector = one_hot_encode_round(current_round_number)
+    print(game_over_vector)
 
     # Vectorizing player's perspective
     player_vector = player.vectorize_player()
+    print(game_over_vector)
 
     # Combine all vectors into a single game state vector
     game_state_vector = game_over_vector + scoreboard_vector +\
                         bids_vector + team_tricks_vector + player_vector + current_round_number_vector
+    print(game_over_vector)
 
     return game_state_vector
 
