@@ -1,11 +1,13 @@
 """
 Author: Daryl
 
-This is a text based game of spades. As of Dec 17th, 2023 this version does work and allow the user to play through multiple hands, make a bid and has functional AI. This is the foundation for a deep learning neural net project. 
-I built this game so I could train the AI players using deep learning with an Nvidia GPU. 
+This is a text based game of spades. As of Dec 17th, 2023 this version does work and allow the user to play through multiple hands, make a bid and has functional AI. This is the foundation for a deep learning neural net project.
+I built this game so I could train the AI players using deep learning with an Nvidia GPU. I had some assistance writing this code using chatGPT
 
 """
+
 import random
+import pickle
 
 # Define suits and ranks for the cards
 suits = ["Spades", "Hearts", "Diamonds", "Clubs"]
@@ -121,6 +123,45 @@ class Player:
         self.card_played_last = None
         self.eligible_cards = []
         # print(f"Hello, I am {self.name}. I am currently not assigned to a team.")
+
+    def card_to_number(card):
+        suit_order = {"Spades": 0, "Hearts": 1, "Diamonds": 2, "Clubs": 3}
+        rank_order = {"Ace": 1, "2": 2, "3": 3, "4": 4, "5": 5, "6": 6, "7": 7, "8": 8, "9": 9, "10": 10, "Jack": 11,
+                      "Queen": 12, "King": 13}
+
+        if card is None:
+            return 0  # Assuming 0 represents no card
+
+        rank, suit = card
+        suit_number = suit_order[suit]
+        rank_number = rank_order[rank]
+
+        # Calculate the card number
+        card_number = suit_number * 13 + rank_number
+        return card_number
+
+    def vectorize_player(self):
+        vector = []
+        # Example: Convert team to a number (0 for Team 1, 1 for Team 2)
+        team_number = 0 if self.team == 'Team 1' else 1
+        vector.append(team_number)
+
+        # Convert hand to numbers (assuming a function card_to_number exists)
+        hand_vector = [self.card_to_number(card) for card in self.hand]
+        vector.extend(hand_vector)
+
+        # Add score
+        vector.append(self.score)
+
+        # Convert last played card to a number
+        # last_card_number = self.card_to_number(self.card_played_last) if self.card_played_last else -1
+        # vector.append(last_card_number)
+
+        # Convert eligible cards to numbers
+        eligible_cards_vector = [self.card_to_number(card) for card in self.eligible_cards]
+        vector.extend(eligible_cards_vector)
+
+        return vector
 
     def make_bid(self, bids):
         raise NotImplementedError()
@@ -335,7 +376,7 @@ def main_game_loop(players, game_parameters, dealer, deck):
         game_parameters.team2_bid = max(4, team2_total_bid)
         print(f"Team 1 Bid: {game_parameters.team1_bid}")
         print(f"Team 2 Bid: {game_parameters.team2_bid}")
-        for _ in range(13):
+        for i in range(13):
             current_hand = []
             first_card_played = True
             for player in players:
@@ -399,11 +440,50 @@ def main_game_loop(players, game_parameters, dealer, deck):
             game_parameters.spades_broken = False
 
 
+def one_hot_encode_round(current_round_number):
+    # Create a vector of zeros with length 13
+    round_vector = [0] * 13
+
+    # Set the element corresponding to the current round number to 1
+    # Subtract 1 from the round number to convert it to a zero-based index
+    round_vector[current_round_number - 1] = 1
+
+    return round_vector
+
+
+def vectorize_game_state(game_over, scoreboard, current_bids, team1_tricks,
+                         team2_tricks, current_round_number, player, players):
+    # Vectorizing game_over
+    game_over_vector = [1 if game_over else 0]
+
+    # Vectorizing scoreboard
+    scoreboard_vector = [scoreboard.team1_overall_score, scoreboard.team2_overall_score, scoreboard.round_number]
+
+    # Vectorizing current bids
+    bids_vector = [current_bids.get(p.name, 0) for p in players]  # Assuming 'players' is accessible
+
+    # Vectorizing team tricks
+    team_tricks_vector = [len(team1_tricks), len(team2_tricks)]
+
+    # Vectorizing current hand
+    current_round_number_vector = one_hot_encode_round(current_round_number)
+
+    # Vectorizing player's perspective
+    player_vector = player.vectorize_player()
+
+    # Combine all vectors into a single game state vector
+    game_state_vector = game_over_vector + scoreboard_vector +\
+                        bids_vector + team_tricks_vector + player_vector + current_round_number_vector
+
+    return game_state_vector
+
+
+
 # Main function to start the game
 def main():
     welcome()
-    human_players = 1  # how_many_players()
-    points = 100  # how_many_points()
+    human_players = 0  # how_many_players()
+    points = 1000  # how_many_points()
     start_game()
 
     game_parameters = game_conditions(human_players=human_players, bot_players=4 - human_players,
@@ -434,6 +514,4 @@ def main():
 # Call the main function
 if __name__ == "__main__":
     main()
-
-
 
