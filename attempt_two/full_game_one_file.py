@@ -25,8 +25,20 @@ class BidNet(nn.Module):
         x = torch.sigmoid(self.fc3(x))  # Sigmoid to get a value between 0 and 1
         return x
 
+class PlayCardNet(nn.Module):
+    def __init__(self):
+        super(PlayCardNet, self).__init__()
+        self.fc1 = nn.Linear(51, 128)  # Assuming 39 features in the input vector
+        self.fc2 = nn.Linear(128, 13)  # Output size is 13 for each card in hand
+
+    def forward(self, x):
+        x = F.relu(self.fc1(x))
+        x = F.softmax(self.fc2(x), dim=1)
+        return x
+
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 bid_net = BidNet().to(device)
+play_card_net = PlayCardNet().to(device)
 
 # Define suits and ranks for the cards
 suits = ["Spades", "Hearts", "Diamonds", "Clubs"]
@@ -285,10 +297,11 @@ class HumanPlayer(Player):
 
 # BotPlayer class represents a bot player in the game
 class BotPlayer(Player):
-    def __init__(self, name, difficulty_level, bid_net):
+    def __init__(self, name, difficulty_level, bid_net, play_card_net):
         super().__init__(name)
         self.difficulty_level = difficulty_level
         self.bid_net = bid_net
+        self.play_card_net = play_card_net
 
     # def make_bid(self, bids, vector):
     #     print(vector)
@@ -320,18 +333,46 @@ class BotPlayer(Player):
         bid = round(bid_output.item() * 13)  # Scale to range 0-13
         return max(1, min(bid, 13))  # Ensure bid is within valid range
 
+    # def play_card(self, leading_suit, spades_broken, vector):
+    #     # Bot player selects a card to play
+    #     self.determine_eligible_cards(leading_suit, spades_broken)
+    #     if self.eligible_cards:
+    #         chosen_card = random.choice(self.eligible_cards)
+    #         self.card_played_last = chosen_card
+    #         self.hand.remove(chosen_card)
+    #         return chosen_card
+    #     else:
+    #         chosen_card = self.hand.pop()
+    #         self.card_played_last = chosen_card
+    #         return chosen_card
     def play_card(self, leading_suit, spades_broken, vector):
-        # Bot player selects a card to play
         self.determine_eligible_cards(leading_suit, spades_broken)
+
+        # Convert vector to tensor and pass to the network
+        vector_tensor = torch.tensor(vector, dtype=torch.float).unsqueeze(0).to(device)
+        card_probabilities = self.play_card_net(vector_tensor).squeeze(0)
+
+        # Choose a card based on the probabilities
         if self.eligible_cards:
-            chosen_card = random.choice(self.eligible_cards)
-            self.card_played_last = chosen_card
-            self.hand.remove(chosen_card)
-            return chosen_card
+            # Map probabilities to eligible cards, ensuring indices are within range
+            eligible_probs = []
+            for card in self.eligible_cards:
+                card_index = self.card_to_number(card) - 1
+                if 0 <= card_index < 13:
+                    eligible_probs.append(card_probabilities[card_index])
+                else:
+                    eligible_probs.append(0)  # Assign a low probability for out-of-range cards
+
+            chosen_card_index = eligible_probs.index(max(eligible_probs))
+            chosen_card = self.eligible_cards[chosen_card_index]
         else:
+            # Fallback if no eligible cards
             chosen_card = self.hand.pop()
-            self.card_played_last = chosen_card
-            return chosen_card
+
+        self.card_played_last = chosen_card
+        self.hand.remove(chosen_card)
+        return chosen_card
+
 
 # Function to create players for the game
 def create_players(num_human_players, total_players=4):
@@ -340,7 +381,7 @@ def create_players(num_human_players, total_players=4):
         players.append(HumanPlayer(f"Human {i + 1}"))
         # print("appended a human player")
     for i in range(total_players - num_human_players):
-        players.append(BotPlayer(f"Bot {i + 1}", 'hard', bid_net))
+        players.append(BotPlayer(f"Bot {i + 1}", 'hard', bid_net, play_card_net))
         # print("appended a bot player")
     dealer_index = random.randint(0, total_players - 1)
     dealer = players[dealer_index]
