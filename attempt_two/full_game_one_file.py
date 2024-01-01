@@ -193,17 +193,17 @@ class Player:
         vector = []
         # Example: Convert team to a number (0 for Team 1, 1 for Team 2)
         team_number = 0 if self.team == 'Team 1' else 1
-        print(team_number)
+        #print(team_number)
         vector.append(team_number)
 
         # Convert hand to numbers (assuming a function card_to_number exists)
         hand_vector = self.vectorize_hand()
-        print(hand_vector)
+        #print(hand_vector)
         vector.extend(hand_vector)
 
         # Add score
         vector.append(self.score)
-        print(self.score)
+        #print(self.score)
 
         # Convert last played card to a number
         # last_card_number = self.card_to_number(self.card_played_last) if self.card_played_last else -1
@@ -212,7 +212,7 @@ class Player:
         # Convert eligible cards to numbers
         eligible_cards_vector = self.vectorize_eligible_cards()
         vector.extend(eligible_cards_vector)
-        print(eligible_cards_vector)
+        #print(eligible_cards_vector)
 
         return vector
 
@@ -321,7 +321,7 @@ class BotPlayer(Player):
     #     return bid
 
     def make_bid(self, bids, vector):
-        print(vector)
+        #print(vector)
         # Convert vector to PyTorch tensor and move to GPU
         vector_tensor = torch.tensor(vector, dtype=torch.float).to(device)
 
@@ -566,32 +566,32 @@ def vectorize_game_state(game_over, scoreboard, current_bids, team1_tricks,
                          team2_tricks, current_round_number, player, players):
     # Vectorizing game_over
     game_over_vector = [1 if game_over else 0]
-    print(game_over_vector)
+    #print(game_over_vector)
 
     # Vectorizing scoreboard
     scoreboard_vector = [scoreboard.team1_overall_score, scoreboard.team2_overall_score, scoreboard.round_number]
-    print(game_over_vector)
+    #print(game_over_vector)
 
     # Vectorizing current bids
     bids_vector = [current_bids.get(p.name, 0) for p in players]  # Assuming 'players' is accessible
-    print(game_over_vector)
+    #print(game_over_vector)
 
     # Vectorizing team tricks
     team_tricks_vector = [len(team1_tricks), len(team2_tricks)]
-    print(game_over_vector)
+    #print(game_over_vector)
 
     # Vectorizing current hand
     current_round_number_vector = one_hot_encode_round(current_round_number)
-    print(game_over_vector)
+    #print(game_over_vector)
 
     # Vectorizing player's perspective
     player_vector = player.vectorize_player()
-    print(game_over_vector)
+   # print(game_over_vector)
 
     # Combine all vectors into a single game state vector
     game_state_vector = game_over_vector + scoreboard_vector +\
                         bids_vector + team_tricks_vector + player_vector + current_round_number_vector
-    print(game_over_vector)
+    #print(game_over_vector)
 
     return game_state_vector
 
