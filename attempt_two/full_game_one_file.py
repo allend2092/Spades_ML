@@ -7,12 +7,10 @@ I built this game so I could train the AI players using deep learning with an Nv
 """
 
 import random
-import pickle
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import os
-os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
 
 class BidNet(nn.Module):
     def __init__(self):
@@ -578,7 +576,7 @@ def assign_teams(players):
 
 # Main game loop function
 def main_game_loop(players, game_parameters, dealer, deck):
-    num_episodes = 300
+    num_episodes = 2000
     current_bids = {}
     team1_tricks = []
     team2_tricks = []
@@ -599,6 +597,7 @@ def main_game_loop(players, game_parameters, dealer, deck):
                 #print(game_state_and_player_vector)
                 # print(f'This is the vector: {game_state_and_player_vector}')
                 bid = outer_player.make_bid(current_bids, bid_game_state_and_player_vector)
+                print(f'{outer_player.name} hand: {outer_player.hand}')
                 print(f'{outer_player.name} bids {bid}')
                 game_state_and_player_vector.clear()
                 if bid is not None:
@@ -610,10 +609,17 @@ def main_game_loop(players, game_parameters, dealer, deck):
             print(f'Team 1 total bid: {team1_total_bid}')
             team2_total_bid = sum(current_bids[outer_player.name] for outer_player in players if outer_player.team == "Team 2")
             print(f'Team 2 total bid: {team2_total_bid}')
+
+            # Cap the team bids at 13
+            team1_total_bid = min(team1_total_bid, 13)
+            team2_total_bid = min(team2_total_bid, 13)
+
             game_parameters.team1_bid = max(4, team1_total_bid)
             game_parameters.team2_bid = max(4, team2_total_bid)
+
             print(f"Team 1 Bid: {game_parameters.team1_bid}")
             print(f"Team 2 Bid: {game_parameters.team2_bid}")
+
             for i in range(13):
                 current_hand = []
                 first_card_played = True
