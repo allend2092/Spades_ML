@@ -97,8 +97,8 @@ class Scoreboard:
     def calculate_team_score(self, bid, tricks):
         # Helper function to calculate score for a team
         score = 0
-        if len(tricks) >= bid:
-            score += 10 * bid + (len(tricks) - bid)
+        if (len(tricks) / 4) >= bid:
+            score += 10 * bid + ((len(tricks) / 4) - bid)
         else:
             score -= 10 * bid
         return score
@@ -315,6 +315,7 @@ class BotPlayer(Player):
         self.bot = True
         self.card_i_played = None
         self.bid_i_made = None
+        self.team_bid = None
         self.reward = 0
         self.memory = []
         self.bid_memory = []
@@ -323,7 +324,15 @@ class BotPlayer(Player):
         self.load_model_if_exists()
         self.last_played_of_my_hand_card_index = None
         self.bid_reward_value = 0
+        self.won_hands = 0
 
+    def count_hands_I_won(self, winning_hand):
+        if winning_hand[1]:
+            self.won_hands += 1
+
+
+    def set_team_bid(self, team_bid):
+        self.team_bid = team_bid
     def load_model_if_exists(self):
         # Construct the expected filename
         model_filename = f'{self.name}_play_card_net.pth'
@@ -459,10 +468,24 @@ class BotPlayer(Player):
         # Clear memory after training
         self.memory.clear()
 
-    def bid_reward(self, actual_tricks_won):
+    def bid_reward(self, actual_tricks_I_won, round_score, team_score, team_tricks_won, team_bid):
         # Calculate reward based on the difference between bid and actual tricks won
-        bid_error = abs(self.bid_i_made - actual_tricks_won)
+        bid_error = abs(self.bid_i_made - actual_tricks_I_won)
         reward = -bid_error * 10  # Negative reward for larger errors
+        if round_score >0:
+            reward += 100
+        elif round_score <0:
+            reward += -500
+        if team_score >0:
+            reward += 50
+        elif team_score <0:
+            reward += -250
+
+        if team_tricks_won > team_bid:
+            reward += 75
+        elif team_tricks_won < team_bid:
+            reward += -75
+
         self.bid_reward_value = reward
         #print(f'Bid reward output: {self.bid_game_vector} - {self.bid_i_made} - {self.bid_reward_value}')
         self.bid_memory.append((self.bid_game_vector, self.bid_i_made, self.bid_reward_value))
@@ -537,8 +560,17 @@ def rotate_dealer(players, current_dealer):
     return players[new_dealer_index]
 
 # Function to check if the game has reached the end
-def check_end_of_game(scoreboard, winning_score):
-    return scoreboard.team1_overall_score >= winning_score or scoreboard.team2_overall_score >= winning_score
+# def check_end_of_game(scoreboard, winning_score):
+#     return scoreboard.team1_overall_score >= winning_score or scoreboard.team2_overall_score >= winning_score
+def check_end_of_game(scoreboard, winning_score, losing_score=-1000):
+    # Check if either team has reached or exceeded the winning score
+    has_won = scoreboard.team1_overall_score >= winning_score or scoreboard.team2_overall_score >= winning_score
+
+    # Check if either team has fallen below the losing score
+    has_lost = scoreboard.team1_overall_score <= losing_score or scoreboard.team2_overall_score <= losing_score
+
+    return has_won or has_lost
+
 
 def arrange_players(players, dealer):
     # Find the index of the dealer
@@ -546,6 +578,10 @@ def arrange_players(players, dealer):
 
     # Arrange players starting from the left of the dealer
     ordered_players = players[dealer_index + 1:] + players[:dealer_index + 1]
+
+    for player in players:
+        player.won_hands = 0
+
     return ordered_players
 
 # Function to assign players to teams
@@ -576,7 +612,7 @@ def assign_teams(players):
 
 # Main game loop function
 def main_game_loop(players, game_parameters, dealer, deck):
-    num_episodes = 2000
+    num_episodes = 100
     current_bids = {}
     team1_tricks = []
     team2_tricks = []
@@ -614,6 +650,8 @@ def main_game_loop(players, game_parameters, dealer, deck):
             team1_total_bid = min(team1_total_bid, 13)
             team2_total_bid = min(team2_total_bid, 13)
 
+
+
             game_parameters.team1_bid = max(4, team1_total_bid)
             game_parameters.team2_bid = max(4, team2_total_bid)
 
@@ -624,6 +662,7 @@ def main_game_loop(players, game_parameters, dealer, deck):
                 current_hand = []
                 first_card_played = True
                 for inner_player in players:
+
                     if first_card_played:
                         inner_player.determine_eligible_cards(None, game_parameters.spades_broken)
                     else:
@@ -655,6 +694,9 @@ def main_game_loop(players, game_parameters, dealer, deck):
                 print(f"Winning card is {winning_card[1]}. Winning player is {winning_card[0].name}."
                       f" Winning Team {winning_card[0].team}"
                       f" \n\nNext round....\n\n")
+
+                winning_card[0].count_hands_I_won(winning_card)
+                print(f'Player {winning_card[0].name} has won {winning_card[0].won_hands}')
                 # Assign the tricks to the winning team
                 assign_tricks_to_team(current_hand, winning_card, team1_tricks, team2_tricks)
 
@@ -680,7 +722,12 @@ def main_game_loop(players, game_parameters, dealer, deck):
             # Calculate and update scores after 13 hands
             team1_score, team2_score = scoreboard.calculate_score(game_parameters.team1_bid, game_parameters.team2_bid,
                                                                   team1_tricks, team2_tricks)
+            print(f"Game Score - Team 1: {scoreboard.team1_overall_score}, Team 2: {scoreboard.team2_overall_score}")
             print(f"Round Score - Team 1: {team1_score}, Team 2: {team2_score}")
+            print(f'Round Tricks - Team 1: {(len(team1_tricks) / 4)} , Team 2: {(len(team2_tricks) / 4)}')
+            print(f'Round bid - Team 1: {team1_total_bid} , Team 2: {team2_total_bid}')
+            print(f'Threshold score: {game_parameters.threshold_score}')
+
 
             if outer_player.bot == True:
                 #print('tabulating hand:')
@@ -693,10 +740,12 @@ def main_game_loop(players, game_parameters, dealer, deck):
                 #print(total_cards)
                 if outer_player.team == 'Team 1':
                     #print(f"Apply Reward function for {outer_player.name} on team: {outer_player.team}. Tricks: {(len(team1_tricks) / 4)}")
-                    outer_player.bid_reward((len(team1_tricks) / 4))
+                    outer_player.set_team_bid(team1_total_bid)
+                    outer_player.bid_reward(outer_player.won_hands, team1_score, scoreboard.team1_overall_score, (len(team1_tricks) / 4), team1_total_bid)
                 elif outer_player.team == 'Team 2':
                     #print(f"Apply Reward function for {outer_player.name} on team: {outer_player.team}. Tricks: {(len(team2_tricks) / 4)}")
-                    outer_player.bid_reward((len(team2_tricks) / 4))
+                    outer_player.set_team_bid(team2_total_bid)
+                    outer_player.bid_reward(outer_player.won_hands, team2_score, scoreboard.team2_overall_score, (len(team2_tricks) / 4), team2_total_bid)
                 else:
                     print(f"Team not recognized for {outer_player.name}.")
                 outer_player.train_bid_network()
