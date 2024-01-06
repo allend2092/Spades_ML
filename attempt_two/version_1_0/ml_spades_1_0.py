@@ -11,6 +11,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import os
+import sys
 
 class BidNet(nn.Module):
     def __init__(self):
@@ -278,7 +279,7 @@ class HumanPlayer(Player):
                 elif action == 2:
                     return 0  # Blind nil bid
                 elif action == 3:
-                    return None  # Quit game
+                    sys.exit()  # Quit game
                 else:
                     print("That's not an available option. Please select again.")
             except ValueError:
