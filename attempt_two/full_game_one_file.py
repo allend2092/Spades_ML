@@ -11,6 +11,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import os
+import sys
 
 class BidNet(nn.Module):
     def __init__(self):
@@ -253,6 +254,7 @@ class HumanPlayer(Player):
     def __init__(self, name):
         super().__init__(name)
         self.bot = False
+        self.won_hands = 0
 
     def display_cards_in_hand(self, vector):
         if not self.hand:
@@ -271,13 +273,13 @@ class HumanPlayer(Player):
             try:
                 action = int(action)
                 if action == 1:
-                    self.display_cards_in_hand()
+                    self.display_cards_in_hand(vector)
                     bid = int(input("What is your bid? "))
                     return bid
                 elif action == 2:
                     return 0  # Blind nil bid
                 elif action == 3:
-                    return None  # Quit game
+                    sys.exit()  # Quit game
                 else:
                     print("That's not an available option. Please select again.")
             except ValueError:
@@ -302,6 +304,10 @@ class HumanPlayer(Player):
                     print("Invalid choice. Please choose a valid card number.")
             except ValueError:
                 print("Please enter a number.")
+
+    def count_hands_I_won(self, winning_hand):
+        if winning_hand[1]:
+            self.won_hands += 1
 
 # BotPlayer class represents a bot player in the game
 class BotPlayer(Player):
@@ -612,7 +618,7 @@ def assign_teams(players):
 
 # Main game loop function
 def main_game_loop(players, game_parameters, dealer, deck):
-    num_episodes = 100
+    num_episodes = 999999
     current_bids = {}
     team1_tricks = []
     team2_tricks = []
@@ -848,7 +854,7 @@ def vectorize_game_state(game_over, scoreboard, current_bids, team1_tricks,
 # Main function to start the game
 def main():
     welcome()
-    human_players = 0  # how_many_players()
+    human_players = 1  # how_many_players()
     points = 300  # how_many_points()
     start_game()
 
