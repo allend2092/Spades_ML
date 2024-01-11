@@ -613,16 +613,22 @@ def check_end_of_game(scoreboard, winning_score, losing_score=-1000):
 
 # Players is another custom class that contains each player object. I believe dealer indicates which player is dealer.
 def arrange_players(players, dealer):
-    # Find the index of the dealer
+    # Players object contans a list of all players. Dealer is the name of a single player. Given a player name where
+    # the player happens to be the dealer, find where in the list of the players object is the one we want as role
+    # dealer. Given this players index in the list of players, the dealer index is returned and set as dealer_index
     dealer_index = players.index(dealer)
 
     # Arrange players starting from the left of the dealer
-    ordered_players = players[dealer_index + 1:] + players[:dealer_index + 1]
+    rearranged_player_list = players[dealer_index + 1:] + players[:dealer_index + 1]
 
+    # This for loop is not needed at the program outset, but between hands, prior to the start of a new hand, the
+    # players get re-arranged based on who the new dealer is. Since its the start of a new round, its also a good time
+    # to set the number of won hands to zero. Honestly, this operation could probably be put in a different location
+    # of the program to add clarity to when its happening.
     for player in players:
         player.won_hands = 0
 
-    return ordered_players
+    return rearranged_player_list
 
 # Function to assign players to teams
 def assign_teams(players):
@@ -911,6 +917,9 @@ def main():
     # Generate players based on the number of humans playing the game
     players, dealer = create_players(game_parameters.give_number_of_players())
 
+    # The purpose of this function is to create a new player list so that the first player is the dealer and the players
+    # after the dealer are to the left of the dealer. Obviously, the final player before the dealer will be to the right
+    # of the dealer.
     ordered_players = arrange_players(players, dealer)
 
     # Assign game players and humans to a team based on the number of humans to bots
