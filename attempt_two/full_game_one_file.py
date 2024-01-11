@@ -111,26 +111,60 @@ class Scoreboard:
 
 # game_conditions class stores the state and rules of the game
 class game_conditions:
-    def __init__(self, human_players, bot_players, winning_score):
-        self.number_of_players = human_players
-        self.ai_opponents = bot_players
-        self.threshold_score = winning_score
-        self.blind_nil_allowed = False
-        self.current_round = 0
+    # set number of human players, number of bot players, and how many points are needed to win the game
+    def __init__(self, human_players: int, bot_players: int, winning_score: int):
+        # Set the number of human players
+        self.number_of_players: int = human_players
+        # Set the number of bot players
+        self.ai_opponents: int = bot_players
+        # How many points need does a team need to reach to win the game?
+        self.threshold_score: int = winning_score
+        # Allows for blind nil bids. This feature is not yet implemented
+        self.blind_nil_allowed: bool = False
+        # Keep track of what round it currently is.
+        self.current_round: int = 0
         self.whose_turn = {}
-        self.team1_bid = None
-        self.team2_bid = None
+        # Track team 1 bids
+        self.team1_bid: int = None
+        # Track team 2 bids
+        self.team2_bid: int = None
         self.game_play_order = []
+        # Helps implement the game rules by tracking what the leading suit is.
         self.leading_suit = None
-        self.spades_broken = False
+        # Has any player played a spade in this hand? If no, spades_broken is false
+        self.spades_broken: bool = False
+
+    def give_number_of_players(self):
+        return self.number_of_players
 
 # Welcome message for the game
 def welcome():
-    print('''[ASCII Art Welcome Message]''')
+    print('''
+
+.------..------..------..------..------..------..------.
+|W.--. ||E.--. ||L.--. ||C.--. ||O.--. ||M.--. ||E.--. |
+| :/\: || (\/) || :/\: || :/\: || :/\: || (\/) || (\/) |
+| :\/: || :\/: || (__) || :\/: || :\/: || :\/: || :\/: |
+| '--'W|| '--'E|| '--'L|| '--'C|| '--'O|| '--'M|| '--'E|
+`------'`------'`------'`------'`------'`------'`------'
+
+''')
 
 # Start game message
 def start_game():
-    print('''[ASCII Art Start Game Message]''')
+    print('''
+
+   ,-,--.  ,--.--------.   ,---.                  ,--.--------.              _,---.   ,---.             ___      ,----.   .=-.-..=-.-..=-.-. 
+ ,-.'-  _\/==/,  -   , -\.--.'  \      .-.,.---. /==/,  -   , -\         _.='.'-,  \.--.'  \     .-._ .'=.'\  ,-.--` , \ /==/_ /==/_ /==/_ / 
+/==/_ ,_.'\==\.-.  - ,-./\==\-/\ \    /==/  `   \\==\.-.  - ,-./        /==.'-     /\==\-/\ \   /==/ \|==|  ||==|-  _.-`|==|, |==|, |==|, |  
+\==\  \    `--`\==\- \   /==/-|_\ |  |==|-, .=., |`--`\==\- \          /==/ -   .-' /==/-|_\ |  |==|,|  / - ||==|   `.-.|==|  |==|  |==|  |  
+ \==\ -\        \==\_ \  \==\,   - \ |==|   '='  /     \==\_ \         |==|_   /_,-.\==\,   - \ |==|  \/  , /==/_ ,    //==/. /==/. /==/. /  
+ _\==\ ,\       |==|- |  /==/ -   ,| |==|- ,   .'      |==|- |         |==|  , \_.' )==/ -   ,| |==|- ,   _ |==|    .-' `--`-``--`-``--`-`   
+/==/\/ _ |      |==|, | /==/-  /\ - \|==|_  . ,'.      |==|, |         \==\-  ,    (==/-  /\ - \|==| _ /\   |==|_  ,`-._ .=.   .=.   .=.     
+\==\ - , /      /==/ -/ \==\ _.\=\.-'/==/  /\ ,  )     /==/ -/          /==/ _  ,  |==\ _.\=\.-'/==/  / / , /==/ ,     /:=; : :=; : :=; :    
+ `--`---'       `--`--`  `--`        `--`-`--`--'      `--`--`          `--`------' `--`        `--`./  `--``--`-----``  `=`   `=`   `=`     
+
+''')
 
 # Function to ask the user for the number of human players
 def how_many_players():
@@ -577,7 +611,7 @@ def check_end_of_game(scoreboard, winning_score, losing_score=-1000):
 
     return has_won or has_lost
 
-
+# Players is another custom class that contains each player object. I believe dealer indicates which player is dealer.
 def arrange_players(players, dealer):
     # Find the index of the dealer
     dealer_index = players.index(dealer)
@@ -853,11 +887,18 @@ def vectorize_game_state(game_over, scoreboard, current_bids, team1_tricks,
 
 # Main function to start the game
 def main():
+
+    # Set intial game conditions
+    human_players = 0  # Set players to 0 for bot training
+    points = 50  # The team that scores this many points will win. -1,000 points causes team to lose
+
+    # Displays some ascii art displaying welcome for the user
     welcome()
-    human_players = 1  # how_many_players()
-    points = 300  # how_many_points()
+
+    # More ascii art for the user
     start_game()
 
+    # This is a custom class I made to track game state, such as score, number of players, bids, etc.
     game_parameters = game_conditions(human_players=human_players, bot_players=4 - human_players,
                                           winning_score=points)
 
@@ -868,11 +909,9 @@ def main():
     deck.shuffle_cards()
 
     # Generate players based on the number of humans playing the game
-    players, dealer = create_players(game_parameters.number_of_players)
-    # print(f"dealer: {dealer}")
+    players, dealer = create_players(game_parameters.give_number_of_players())
 
     ordered_players = arrange_players(players, dealer)
-    # print(f"ordered_players: {ordered_players}")
 
     # Assign game players and humans to a team based on the number of humans to bots
     assign_teams(ordered_players)
@@ -883,7 +922,6 @@ def main():
     # Main game loop. Begin the game loop
     main_game_loop(ordered_players, game_parameters, dealer, deck)
 
-# Call the main function
+# main block.
 if __name__ == "__main__":
     main()
-
