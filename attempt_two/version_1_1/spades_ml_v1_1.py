@@ -732,7 +732,7 @@ def main_game_loop(players, game_parameters, dealer, deck):
 
                 # This removes the values put into the vector by the vectorizer.
                 # Its not clear that I need this clear operation to happen here.
-                game_state_and_player_vector.clear()
+                #game_state_and_player_vector.clear()
 
                 # I think this is a program exit point for the player. If the player chooses bid none, this effectively
                 # quits the game.
@@ -775,44 +775,63 @@ def main_game_loop(players, game_parameters, dealer, deck):
                 current_hand = []
 
                 # A variable to keep track of the first card played in the hand. This is needed to determine what the
-                # players eligible cards are. 
+                # players eligible cards are.
                 first_card_played = True
-                for inner_player in players:
 
+                # This for loop allows each player to play a card. It also restricts what card each player can play.
+                for inner_player in players:
+                    # Check if the variable first_card_played is true or false. Determine the players eligible cards
+                    # based on the state of the variable
                     if first_card_played:
                         inner_player.determine_eligible_cards(None, game_parameters.spades_broken)
                     else:
                         inner_player.determine_eligible_cards(game_parameters.leading_suit, game_parameters.spades_broken)
+
                     # Vectorize the game state before the bots make a decision
                     game_state_and_player_vector = vectorize_game_state(game_over, scoreboard, current_bids, team1_tricks,
                                                                         team2_tricks, 0, inner_player, players)
                     outer_game_state_and_player_vector = vectorize_game_state(game_over, scoreboard, current_bids, team1_tricks,
                                                                         team2_tricks, 0, inner_player, players)
-
+                    # The player choses a card. For the bots, they accept the vectorized game state as an input to their
+                    # card decision
                     card_played = inner_player.play_card(game_parameters.leading_suit, game_parameters.spades_broken,
                                                    game_state_and_player_vector)
-                    if outer_player.name == inner_player.name:
-                        #print("copy values!")
-                        outer_player.play_card_game_vector = outer_game_state_and_player_vector
-                        #print(f'printing outer player vector: {outer_player.play_card_game_vector}')
 
-                    #game_state_and_player_vector.clear()
-                    # print(card_played)
+                    # While inside of this nested for loop, check that the players in both loops are currently being
+                    # iterated. If so, set the vector of the player in the outer loop based on vectorized information
+                    # calculated on the inner loop
+                    if outer_player.name == inner_player.name:
+                        outer_player.play_card_game_vector = outer_game_state_and_player_vector
+
+                    # Diagnostic print statement
                     print(f"{inner_player.name} of team {inner_player.team} played {card_played}")
+
+                    # Make a record of the first card played so the suit will be known. Also, alter the first card
+                    # played variable
                     if first_card_played:
                         game_parameters.leading_suit = card_played[1]
                         first_card_played = False
+                    # Determine if anyone played a spade. If so, set spades broken to true
                     if card_played[1] == 'Spades':
                         game_parameters.spades_broken = True
+                    # This data structure keeps track of what cards were played in the round
                     current_hand.append((inner_player, card_played))
-                #print(f'printing outer player vector: {outer_player.play_card_game_vector}')
+
+                # Notice indentation. This means that upon completion of the for loop, look through the hand that was
+                # played and determine which player and card won the hand
                 winning_card = determine_winning_card_and_team(current_hand)
+
+                # These are diagnostic print statements that allow the observer to see whats happening during training.
                 print(f"Winning card is {winning_card[1]}. Winning player is {winning_card[0].name}."
                       f" Winning Team {winning_card[0].team}"
                       f" \n\nNext round....\n\n")
 
+                # Count won hands. I don't recall why this was needed
                 winning_card[0].count_hands_I_won(winning_card)
+
+                # Diagnostic print statement
                 print(f'Player {winning_card[0].name} has won {winning_card[0].won_hands}')
+
                 # Assign the tricks to the winning team
                 assign_tricks_to_team(current_hand, winning_card, team1_tricks, team2_tricks)
 
@@ -820,7 +839,8 @@ def main_game_loop(players, game_parameters, dealer, deck):
                 winning_player_index = players.index(winning_card[0])
                 players = players[winning_player_index:] + players[:winning_player_index]
 
-                #print(f'training vector: {outer_player.play_card_game_vector}')
+                # disseminate rewards and penalties to the bots according to their performance. This section only
+                # rewards and penalizes the network responsible for choosing cards of a dealt hand.
                 if outer_player.bot == True:
                     outer_player.play_card_reward_nn(current_hand, winning_card, team1_tricks, team2_tricks)
                     outer_player.train_play_card_network()
@@ -838,32 +858,37 @@ def main_game_loop(players, game_parameters, dealer, deck):
             # Calculate and update scores after 13 hands
             team1_score, team2_score = scoreboard.calculate_score(game_parameters.get_team1_bid(), game_parameters.get_team2_bid(),
                                                                   team1_tricks, team2_tricks)
+
+            # Diagnostic print statements showing the user the state of the game
             print(f"Game Score - Team 1: {scoreboard.team1_overall_score}, Team 2: {scoreboard.team2_overall_score}")
             print(f"Round Score - Team 1: {team1_score}, Team 2: {team2_score}")
             print(f'Round Tricks - Team 1: {(len(team1_tricks) / 4)} , Team 2: {(len(team2_tricks) / 4)}')
             print(f'Round bid - Team 1: {team1_total_bid} , Team 2: {team2_total_bid}')
             print(f'Threshold score: {game_parameters.threshold_score}')
 
-
+            # determine if the player is a bot. If so disseminate rewards to the bid choosing network.
             if outer_player.bot == True:
-                #print('tabulating hand:')
-                #print(outer_player.team)
-                #print(team1_tricks)
-                #total_cards = (len(team1_tricks) / 4)
-                #print(total_cards)
-                #print(team2_tricks)
-                #total_cards = (len(team2_tricks) / 4)
-                #print(total_cards)
                 if outer_player.team == 'Team 1':
-                    #print(f"Apply Reward function for {outer_player.name} on team: {outer_player.team}. Tricks: {(len(team1_tricks) / 4)}")
+                    # Apply reward function for bots on team 1
                     outer_player.set_team_bid(team1_total_bid)
-                    outer_player.bid_reward(outer_player.won_hands, team1_score, scoreboard.team1_overall_score, (len(team1_tricks) / 4), team1_total_bid)
+                    outer_player.bid_reward(outer_player.won_hands,
+                                            team1_score,
+                                            scoreboard.team1_overall_score,
+                                            (len(team1_tricks) / 4),
+                                            team1_total_bid)
+
                 elif outer_player.team == 'Team 2':
-                    #print(f"Apply Reward function for {outer_player.name} on team: {outer_player.team}. Tricks: {(len(team2_tricks) / 4)}")
+                    # Apply reward function for bots on team 2
                     outer_player.set_team_bid(team2_total_bid)
-                    outer_player.bid_reward(outer_player.won_hands, team2_score, scoreboard.team2_overall_score, (len(team2_tricks) / 4), team2_total_bid)
+                    outer_player.bid_reward(outer_player.won_hands,
+                                            team2_score,
+                                            scoreboard.team2_overall_score,
+                                            (len(team2_tricks) / 4),
+                                            team2_total_bid)
                 else:
+                    # Catch all section of code for unlikely event that the bot is not on team 1 or team 2
                     print(f"Team not recognized for {outer_player.name}.")
+                # Looks like there is some network training that happens here
                 outer_player.train_bid_network()
 
             # Check if the game has reached the winning score
