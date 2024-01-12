@@ -134,6 +134,20 @@ class game_conditions:
         # Has any player played a spade in this hand? If no, spades_broken is false
         self.spades_broken: bool = False
 
+    def set_team1_bid(self, new_bid_value):
+        self.team1_bid = new_bid_value
+        print(f'New team1 bid value set: {self.team1_bid}')
+
+    def set_team2_bid(self, new_bid_value):
+        self.team2_bid = new_bid_value
+        print(f'New team2 bid value set: {self.team2_bid}')
+
+    def get_team1_bid(self):
+        return self.team1_bid
+
+    def get_team2_bid(self):
+        return self.team2_bid
+
     def give_number_of_players(self):
         return self.number_of_players
 
@@ -721,31 +735,47 @@ def main_game_loop(players, game_parameters, dealer, deck):
                 game_state_and_player_vector.clear()
 
                 # I think this is a program exit point for the player. If the player chooses bid none, this effectively
-                # quites the game.
+                # quits the game.
                 if bid is not None:
                     current_bids[outer_player.get_name()] = bid
                 else:
                     game_over = True
                     break
-            team1_total_bid = sum(current_bids[outer_player.name] for outer_player in players if outer_player.team == "Team 1")
+            # Adds the bids of all players on Team 1
+            team1_total_bid = sum(current_bids[outer_player.name]
+                                  for outer_player in players if outer_player.team == "Team 1")
+            # Diagnostic print statement to declare what the team bid is
             print(f'Team 1 total bid: {team1_total_bid}')
-            team2_total_bid = sum(current_bids[outer_player.name] for outer_player in players if outer_player.team == "Team 2")
+
+            # Adds the bids of all players on Team 2
+            team2_total_bid = sum(current_bids[outer_player.name]
+                                  for outer_player in players if outer_player.team == "Team 2")
+            # Diagnostic print statement to declare what the team bid is
             print(f'Team 2 total bid: {team2_total_bid}')
 
-            # Cap the team bids at 13
+            # Cap the team bids at 13. This is needed because when the bot neural network is learning, sometimes it
+            # makes outragously high bids beyond the number of hands that can be played in a hand. This reset is a guard
+            # rail
             team1_total_bid = min(team1_total_bid, 13)
             team2_total_bid = min(team2_total_bid, 13)
 
+            # Once the bid is known, set the bid in the game parameters object. In accordance with the rules of Spades
+            # as I understand the rules, a team bid cannot be lower than 4. Thus, we use the max function here to supply
+            # actual bid or the number 4, whichever is higher.
+            game_parameters.set_team1_bid(max(4, team1_total_bid))
+            game_parameters.set_team2_bid(max(4, team2_total_bid))
 
+            # Diagnostic print out of the bids made by each team
+            print(f"Team 1 Bid: {game_parameters.get_team1_bid()}")
+            print(f"Team 2 Bid: {game_parameters.get_team2_bid()}")
 
-            game_parameters.team1_bid = max(4, team1_total_bid)
-            game_parameters.team2_bid = max(4, team2_total_bid)
-
-            print(f"Team 1 Bid: {game_parameters.team1_bid}")
-            print(f"Team 2 Bid: {game_parameters.team2_bid}")
-
+            # Now the card game commences with each player playing their cards inside of the for loop
             for i in range(13):
+                # This initializes the list that keeps track of the current hand
                 current_hand = []
+
+                # A variable to keep track of the first card played in the hand. This is needed to determine what the
+                # players eligible cards are. 
                 first_card_played = True
                 for inner_player in players:
 
@@ -806,7 +836,7 @@ def main_game_loop(players, game_parameters, dealer, deck):
             game_parameters.spades_broken = False
 
             # Calculate and update scores after 13 hands
-            team1_score, team2_score = scoreboard.calculate_score(game_parameters.team1_bid, game_parameters.team2_bid,
+            team1_score, team2_score = scoreboard.calculate_score(game_parameters.get_team1_bid(), game_parameters.get_team2_bid(),
                                                                   team1_tricks, team2_tricks)
             print(f"Game Score - Team 1: {scoreboard.team1_overall_score}, Team 2: {scoreboard.team2_overall_score}")
             print(f"Round Score - Team 1: {team1_score}, Team 2: {team2_score}")
