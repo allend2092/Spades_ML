@@ -12,30 +12,118 @@ import torch.nn as nn
 import torch.nn.functional as F
 import os
 import sys
+import time
 
 class BidNet(nn.Module):
     def __init__(self):
+        # Initialize the BidNet class as a subclass of nn.Module
         super(BidNet, self).__init__()
-        self.fc1 = nn.Linear(in_features=51, out_features=128)  # Adjust in_features based on vector size
-        self.fc2 = nn.Linear(128, 64)
-        self.fc3 = nn.Linear(64, 13)  # Output size is 13 for each possible bid
+
+        # Define the first fully connected (fc) layer.
+        # It takes an input with a size of 51 (in_features=51), which should match the size of your input vector.
+        # It outputs a tensor with a size of 128 (out_features=128). This is a hyperparameter and can be adjusted.
+        self.fc1 = nn.Linear(in_features=51, out_features=128)
+        # Define additional fully connected layers.
+        # Each subsequent layer takes the output of the previous layer as its input.
+        # The number of output features gradually decreases, which is a common design in deep networks.
+        self.fc2 = nn.Linear(128, 120)
+        self.fc3 = nn.Linear(120, 110)
+        self.fc4 = nn.Linear(110, 100)
+        self.fc5 = nn.Linear(100, 90)
+        self.fc6 = nn.Linear(90, 80)
+        self.fc7 = nn.Linear(80, 70)
+        self.fc8 = nn.Linear(70, 60)
+        self.fc9 = nn.Linear(60, 50)
+
+        # The final layer (fc10) is the output layer of the network.
+        # It outputs 13 features, corresponding to each possible bid (assuming there are 13 possible bids).
+        self.fc10 = nn.Linear(50, 13)
 
     def forward(self, x):
+        # The forward method defines the data flow through the network.
+
+        # Input x is passed through each layer in sequence.
+        # The ReLU (Rectified Linear Unit) activation function is applied after each layer except the last one.
+        # ReLU introduces non-linearity, allowing the network to learn more complex patterns.
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
-        x = self.fc3(x)  # No sigmoid here; raw scores for each class
+        x = F.relu(self.fc3(x))
+        x = F.relu(self.fc4(x))
+        x = F.relu(self.fc5(x))
+        x = F.relu(self.fc6(x))
+        x = F.relu(self.fc7(x))
+        x = F.relu(self.fc8(x))
+        x = F.relu(self.fc9(x))
+        # The output of the last layer (fc10) is the raw scores for each class (possible bid).
+        # No activation function like softmax is applied here; this implies that the raw scores are used.
+        # In a classification context, these scores are often passed through a softmax function
+        # outside the network to turn them into probabilities.
+        x = self.fc10(x)
+
         return x
+
+
+# The forward method defines the data flow through the network.
+
+# Input x is passed through each layer in sequence.
+# The ReLU (Rectified Linear Unit) activation function is applied after each layer except the last one.
+# ReLU introduces non-linearity, allowing the network
+
+
+import torch.nn as nn
+import torch.nn.functional as F
 
 class PlayCardNet(nn.Module):
     def __init__(self):
         super(PlayCardNet, self).__init__()
-        self.fc1 = nn.Linear(51, 128)  # Assuming 39 features in the input vector
-        self.fc2 = nn.Linear(128, 13)  # Output size is 13 for each card in hand
+
+        # Define the layers of the neural network.
+        # Each layer is a fully connected (linear) layer.
+
+        # First layer: Takes an input with a size of 51 (size of your input vector).
+        # Outputs a tensor with a size of 128. This is the first hidden layer.
+        self.fc1 = nn.Linear(51, 128)
+
+        # Subsequent layers: Each takes the output of the previous layer as input
+        # and outputs a tensor with a reduced size. This gradual reduction helps in
+        # abstracting and compressing the information through the network.
+        self.fc2 = nn.Linear(128, 120)
+        self.fc3 = nn.Linear(120, 110)
+        self.fc4 = nn.Linear(110, 100)
+        self.fc5 = nn.Linear(100, 90)
+        self.fc6 = nn.Linear(90, 80)
+        self.fc7 = nn.Linear(80, 70)
+        self.fc8 = nn.Linear(70, 60)
+        self.fc9 = nn.Linear(60, 50)
+
+        # Final layer: This is the output layer of the network.
+        # It takes the 50 features from the ninth layer as input.
+        # Outputs 13 features, corresponding to each card in hand (assuming there are 13 cards).
+        # This layer will use a softmax activation function in the forward method.
+        self.fc10 = nn.Linear(50, 13)
 
     def forward(self, x):
-        x = F.relu(self.fc1(x))
-        x = F.softmax(self.fc2(x), dim=1)
+        # The forward method defines the data flow through the network.
+        # Input x is passed through each layer, and the ReLU (Rectified Linear Unit) activation function is applied.
+        # ReLU introduces non-linearity, allowing the network to learn more complex patterns.
+
+        x = F.relu(self.fc1(x))  # Pass input through the first layer, then apply ReLU
+        x = F.relu(self.fc2(x))  # Pass through the second layer, then apply ReLU
+        x = F.relu(self.fc3(x))  # Continue this pattern for subsequent layers
+        x = F.relu(self.fc4(x))
+        x = F.relu(self.fc5(x))
+        x = F.relu(self.fc6(x))
+        x = F.relu(self.fc7(x))
+        x = F.relu(self.fc8(x))
+        x = F.relu(self.fc9(x))
+
+        # The final layer's output is passed through a softmax function.
+        # Softmax turns the raw scores into probabilities, which is useful for classification tasks.
+        # The 'dim=1' argument specifies that the softmax should be applied to each row (each sample).
+        x = F.softmax(self.fc10(x), dim=1)
+
         return x
+
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 bid_net = BidNet().to(device)
@@ -414,6 +502,7 @@ class BotPlayer(Player):
         self.bot = True
         self.card_i_played = None
         self.bid_i_made = None
+        self.rounds_won = 0
         self.team_bid = None
         self.reward = 0
         self.memory = []
@@ -465,7 +554,9 @@ class BotPlayer(Player):
         # Convert vector to PyTorch tensor and move to GPU
         vector_tensor = torch.tensor(vector, dtype=torch.float).to(device)
 
-        # Get bid from neural network
+        # Get bid from neural network. At this stage we only need to run inference on the network. We don't know the
+        # Outcome of the bid yet, so no learning can be accomplished at this time. The vector should be saved for
+        # Comparison of the vector at a later stage of the game.
         with torch.no_grad():
             bid_output = self.bid_net(vector_tensor)
 
@@ -477,6 +568,119 @@ class BotPlayer(Player):
 
         self.bid_i_made = predicted_bid
         return predicted_bid
+
+    def bid_reward(self, actual_tricks_I_won, round_score, team_score, team_tricks_won, team_bid):
+        # This method calculates the reward for the bot based on various game outcomes.
+
+        # Calculate the absolute difference between the bid made by the bot and the actual tricks it won.
+        # This measures how accurate the bot's bid was compared to its performance.
+        bid_error = abs(self.bid_i_made - actual_tricks_I_won)
+
+        # Initialize the reward. A negative reward is given for larger bid errors.
+        # This penalizes the bot for making inaccurate bids.
+        # The penalty is proportional to the magnitude of the error.
+        reward = -bid_error * 10  # Negative reward for larger errors
+
+        # Add a reward or penalty based on the round score.
+        # If the round score is positive, the bot gets a reward, encouraging it to win rounds.
+        if round_score >0:
+            reward += 100
+
+        # If the round score is negative, a large penalty is applied, discouraging losing rounds.
+        elif round_score <0:
+            reward += -500
+
+        # Add a reward or penalty based on the team score.
+        # This encourages the bot to contribute positively to the team's performance.
+        if team_score >0:
+            reward += 50
+        elif team_score <0:
+            reward += -250
+
+        # Add a reward or penalty based on the team's performance relative to the team bid.
+        # If the team wins more tricks than the team bid, a reward is given.
+        # This encourages the bot to contribute to achieving or exceeding the team bid.
+        if team_tricks_won > team_bid:
+            reward += 75
+
+        # If the team wins fewer tricks than the team bid, a penalty is applied.
+        # This discourages the bot from contributing to a result where the team underperforms relative to the bid.
+        elif team_tricks_won < team_bid:
+            reward += -75
+
+        # Store the calculated reward value in the bot's attribute for later use.
+        self.bid_reward_value = reward
+
+        # Append the current game state (vector), the bid made, and the calculated reward to the bot's memory.
+        # This memory will be used later for training the neural network.
+        # Storing these elements allows the bot to learn from its experiences by understanding the outcomes of its actions.
+        self.bid_memory.append((self.bid_game_vector, self.bid_i_made, self.bid_reward_value))
+
+        # Return the calculated reward. This could be used for logging or further processing if needed.
+        return reward
+
+    def train_bid_network(self):
+        # This method is responsible for training the neural network used for bidding.
+
+        # First, check if there is enough data in the memory to proceed with training.
+        # If there is not enough data (less than one data point), the method returns early.
+        # self.bid_memory is populated by the bid_reward() method.
+        # self.bid_memory.append((self.bid_game_vector, self.bid_i_made, self.bid_reward_value))
+        if len(self.bid_memory) < 1:
+            return
+
+        # Convert the collected game states, bids, and rewards from the memory into PyTorch tensors.
+        # This is necessary for processing the data with the neural network.
+
+        # Convert game states to a tensor. These are the inputs to the network.
+        state_tensors = torch.tensor([item[0] for item in self.bid_memory], dtype=torch.float).to(device)
+
+        # Convert the bids made by the bot to a tensor. These will be used to compute the loss.
+        # The bids are adjusted by subtracting 1 to align with the network's output indexing.
+        bid_tensors = torch.tensor([item[1] - 1 for item in self.bid_memory], dtype=torch.long).to(device)
+
+        # Convert the rewards to a tensor. These are not directly used in this training step but could be useful for advanced training techniques.
+        reward_tensors = torch.tensor([item[2] for item in self.bid_memory], dtype=torch.float).to(device)
+
+        # Perform a forward pass through the network.
+        # This computes the predicted bid probabilities based on the game states.
+        predicted_bid_probabilities = self.bid_net(state_tensors)
+        print(f'Predicted bid probability is: {predicted_bid_probabilities}')
+        print(f'Bid tensors: {bid_tensors}')
+
+
+        # Compute the loss using CrossEntropyLoss.
+        # This is a common loss function for multi-class classification problems.
+        # The loss is calculated between the predicted bid probabilities and the actual bids made
+        # (adjusted for indexing).
+
+        # Compute loss using CrossEntropyLoss for multi-class classification
+        loss_function = torch.nn.CrossEntropyLoss()
+        loss = loss_function(predicted_bid_probabilities, bid_tensors)
+
+
+        # Print the calculated loss for monitoring. This helps in understanding how well the network is performing and
+        # if it's improving over time.
+        print(f'Bid Loss: {loss}')
+
+
+        # Before updating the network, clear out any existing gradients.
+        # This is necessary because gradients accumulate by default in PyTorch.
+        self.optimizer.zero_grad()
+
+        # Perform a backward pass to compute the gradients of the loss with respect to the network parameters.
+        loss.backward()
+
+        # Update the network parameters based on the computed gradients.
+        # This step is where the actual learning happens, adjusting the network to reduce the loss.
+        self.optimizer.step()
+
+        # After training, clear the memory.
+        # This is important to prevent the network from being trained on the same data multiple times, which can lead
+        # to overfitting.
+        # Clearing the memory ensures that the network is always trained on new data.
+        self.memory.clear()
+        #time.sleep(10)
 
     # def play_card(self, leading_suit, spades_broken, vector):
     #     # Bot player selects a card to play
@@ -567,56 +771,6 @@ class BotPlayer(Player):
         # Clear memory after training
         self.memory.clear()
 
-    def bid_reward(self, actual_tricks_I_won, round_score, team_score, team_tricks_won, team_bid):
-        # Calculate reward based on the difference between bid and actual tricks won
-        bid_error = abs(self.bid_i_made - actual_tricks_I_won)
-        reward = -bid_error * 10  # Negative reward for larger errors
-        if round_score >0:
-            reward += 100
-        elif round_score <0:
-            reward += -500
-        if team_score >0:
-            reward += 50
-        elif team_score <0:
-            reward += -250
-
-        if team_tricks_won > team_bid:
-            reward += 75
-        elif team_tricks_won < team_bid:
-            reward += -75
-
-        self.bid_reward_value = reward
-        #print(f'Bid reward output: {self.bid_game_vector} - {self.bid_i_made} - {self.bid_reward_value}')
-        self.bid_memory.append((self.bid_game_vector, self.bid_i_made, self.bid_reward_value))
-        return reward
-
-    def train_bid_network(self):
-        # Ensure there's enough data to train
-        if len(self.bid_memory) < 1:
-            return
-
-        # Convert the memory data into tensors
-        #print(f'Self memory prior to bid training: {self.bid_memory}')
-        state_tensors = torch.tensor([item[0] for item in self.bid_memory], dtype=torch.float).to(device)
-        bid_tensors = torch.tensor([item[1] - 1 for item in self.bid_memory], dtype=torch.long).to(device)
-        #print(bid_tensors)
-        reward_tensors = torch.tensor([item[2] for item in self.bid_memory], dtype=torch.float).to(device)
-
-        # Forward pass: compute predicted bid probabilities
-        predicted_bid_probabilities = self.bid_net(state_tensors)
-
-        # Compute loss using CrossEntropyLoss for multi-class classification
-        loss_function = torch.nn.CrossEntropyLoss()
-        loss = loss_function(predicted_bid_probabilities, bid_tensors)
-        print(f'Bid Loss: {loss}')
-
-        # Backward pass and optimize
-        self.optimizer.zero_grad()
-        loss.backward()
-        self.optimizer.step()
-
-        # Clear memory after training
-        self.memory.clear()
 
 # Function to create players for the game
 def create_players(num_human_players, total_players=4):
@@ -1028,7 +1182,7 @@ def vectorize_game_state(game_over, scoreboard, current_bids, team1_tricks,
 def main():
 
     # Set intial game conditions
-    human_players = 1 # Set players to 0 for bot training
+    human_players = 0 # Set players to 0 for bot training
     points = 50  # The team that scores this many points will win. -1,000 points causes team to lose
 
     # Displays some ascii art displaying welcome for the user
