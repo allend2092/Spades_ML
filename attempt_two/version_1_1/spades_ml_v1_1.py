@@ -211,6 +211,27 @@ class Player:
         self.bot = None
         # print(f"Hello, I am {self.name}. I am currently not assigned to a team.")
 
+    def display_hand(self):
+        # Define card order for sorting
+        rank_order = {'2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, '10': 10,
+                      'Jack': 11, 'Queen': 12, 'King': 13, 'Ace': 14}
+        suit_order = {'Hearts': 0, 'Clubs': 1, 'Diamonds': 2, 'Spades': 3}
+
+        # Sort the hand by suit and then by rank
+        sorted_hand = sorted(self.hand, key=lambda card: (suit_order[card[1]], rank_order[card[0]]))
+
+        # Group cards by suit
+        hand_by_suit = {'Hearts': [], 'Clubs': [], 'Diamonds': [], 'Spades': []}
+        for rank, suit in sorted_hand:
+            hand_by_suit[suit].append(rank)
+
+        # Format the output
+        formatted_hand = ''
+        for suit in ['Hearts', 'Clubs', 'Diamonds', 'Spades']:
+            formatted_hand += f'{suit}: {", ".join(hand_by_suit[suit])}\n'
+
+        return formatted_hand.strip()
+
     def set_name(self, new_name):
         self.name = new_name
         print(f'New name set as {self.name}')
@@ -315,9 +336,26 @@ class HumanPlayer(Player):
         if not self.hand:
             print("No cards in hand.")
             return
-        self.hand.sort(key=lambda card: (suits.index(card[1]), ranks.index(card[0])))
-        card_str = ", ".join(f"{card[0]} of {card[1]}" for card in self.hand)
-        print(f"{self.name}'s cards: {card_str}")
+
+        # Define card order for sorting
+        rank_order = {'2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, '10': 10,
+                      'Jack': 11, 'Queen': 12, 'King': 13, 'Ace': 14}
+        suit_order = {'Hearts': 0, 'Clubs': 1, 'Diamonds': 2, 'Spades': 3}
+
+        # Sort the hand by suit and then by rank
+        sorted_hand = sorted(self.hand, key=lambda card: (suit_order[card[1]], rank_order[card[0]]))
+
+        # Group cards by suit
+        hand_by_suit = {'Hearts': [], 'Clubs': [], 'Diamonds': [], 'Spades': []}
+        for rank, suit in sorted_hand:
+            hand_by_suit[suit].append(rank)
+
+        # Format the output
+        formatted_hand = ''
+        for suit in ['Hearts', 'Clubs', 'Diamonds', 'Spades']:
+            formatted_hand += f'{suit}: {", ".join(hand_by_suit[suit])}\n'
+
+        print(f"{self.name}'s cards:\n{formatted_hand.strip()}")
 
     def make_bid(self, bids, vector):
         # Human player makes a bid
@@ -727,8 +765,8 @@ def main_game_loop(players, game_parameters, dealer, deck):
                 bid = outer_player.make_bid(current_bids, bid_game_state_and_player_vector)
 
                 # Print statements to inform the user what is currently happeneing
-                print(f'{outer_player.name} hand: {outer_player.hand}')
-                print(f'{outer_player.name} bids {bid}')
+                print(f'{outer_player.name} \nhand: {outer_player.display_hand()}\n')
+                print(f'{outer_player.name} bids {bid}\n')
 
                 # This removes the values put into the vector by the vectorizer.
                 # Its not clear that I need this clear operation to happen here.
@@ -990,7 +1028,7 @@ def vectorize_game_state(game_over, scoreboard, current_bids, team1_tricks,
 def main():
 
     # Set intial game conditions
-    human_players = 0  # Set players to 0 for bot training
+    human_players = 1 # Set players to 0 for bot training
     points = 50  # The team that scores this many points will win. -1,000 points causes team to lose
 
     # Displays some ascii art displaying welcome for the user
