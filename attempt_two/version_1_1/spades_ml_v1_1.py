@@ -297,8 +297,21 @@ class Player:
         self.card_played_last = None
         self.eligible_cards = []
         self.bot = None
-        # print(f"Hello, I am {self.name}. I am currently not assigned to a team.")
+        self.won_hands = 0
+        self.bid_i_made = 0
 
+    def reset_bid(self):
+        self.bid_i_made = 0
+
+    def count_hands_I_won(self, winning_hand):
+        if winning_hand[1]:
+            self.won_hands += 1
+    # def check_if_i_won(self, winner_name):
+    #     print(f"winner name: {winner_name}")
+    #     print(f"won hands before: {self.won_hands}")
+    #     if winner_name == self.name:
+    #         self.won_hands += 1
+    #         print(f"won hands after: {self.won_hands}")
     def display_hand(self):
         # Define card order for sorting
         rank_order = {'2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, '10': 10,
@@ -418,7 +431,8 @@ class HumanPlayer(Player):
     def __init__(self, name):
         super().__init__(name)
         self.bot = False
-        self.won_hands = 0
+        #self.won_hands = 0
+
 
     def display_cards_in_hand(self, vector):
         if not self.hand:
@@ -456,6 +470,7 @@ class HumanPlayer(Player):
                 if action == 1:
                     self.display_cards_in_hand(vector)
                     bid = int(input("What is your bid? "))
+                    self.bid_i_made = bid
                     return bid
                 elif action == 2:
                     return 0  # Blind nil bid
@@ -486,9 +501,7 @@ class HumanPlayer(Player):
             except ValueError:
                 print("Please enter a number.")
 
-    def count_hands_I_won(self, winning_hand):
-        if winning_hand[1]:
-            self.won_hands += 1
+
 
 # BotPlayer class represents a bot player in the game
 class BotPlayer(Player):
@@ -498,10 +511,11 @@ class BotPlayer(Player):
         self.bid_net = bid_net
         self.play_card_net = play_card_net
         self.bid_game_vector = [] # instantiated so that I can carry the game vector to different scopes of program
+        self.game_vector_inputs = []
+        self.bid_ground_truth_game_vector = []
         self.play_card_game_vector = []
         self.bot = True
         self.card_i_played = None
-        self.bid_i_made = None
         self.rounds_won = 0
         self.team_bid = None
         self.reward = 0
@@ -512,7 +526,7 @@ class BotPlayer(Player):
         self.load_model_if_exists()
         self.last_played_of_my_hand_card_index = None
         self.bid_reward_value = 0
-        self.won_hands = 0
+        #self.won_hands = 0
 
     def count_hands_I_won(self, winning_hand):
         if winning_hand[1]:
@@ -558,10 +572,11 @@ class BotPlayer(Player):
         # Outcome of the bid yet, so no learning can be accomplished at this time. The vector should be saved for
         # Comparison of the vector at a later stage of the game.
         with torch.no_grad():
-            bid_output = self.bid_net(vector_tensor)
+            bid_output = self.bid_net.forward(vector_tensor)
 
         # Get the index of the highest score, which represents the predicted bid
         predicted_bid_index = torch.argmax(bid_output).item()
+        print(f'\nBot bid index: {predicted_bid_index}\n')
 
         # Convert index to bid (index 0 corresponds to bid 1, index 1 to bid 2, etc.)
         predicted_bid = predicted_bid_index + 1
@@ -569,8 +584,10 @@ class BotPlayer(Player):
         self.bid_i_made = predicted_bid
         return predicted_bid
 
-    def bid_reward(self, actual_tricks_I_won, round_score, team_score, team_tricks_won, team_bid):
+    def bid_reward(self, actual_tricks_I_won, round_score, team_score, team_tricks_won, team_bid, ground_truth_vector):
         # This method calculates the reward for the bot based on various game outcomes.
+
+        self.bid_ground_truth_game_vector = ground_truth_vector
 
         # Calculate the absolute difference between the bid made by the bot and the actual tricks it won.
         # This measures how accurate the bot's bid was compared to its performance.
@@ -614,7 +631,7 @@ class BotPlayer(Player):
         # Append the current game state (vector), the bid made, and the calculated reward to the bot's memory.
         # This memory will be used later for training the neural network.
         # Storing these elements allows the bot to learn from its experiences by understanding the outcomes of its actions.
-        self.bid_memory.append((self.bid_game_vector, self.bid_i_made, self.bid_reward_value))
+        self.bid_memory.append((self.bid_game_vector, self.bid_ground_truth_game_vector, self.bid_reward_value))
 
         # Return the calculated reward. This could be used for logging or further processing if needed.
         return reward
@@ -633,20 +650,23 @@ class BotPlayer(Player):
         # This is necessary for processing the data with the neural network.
 
         # Convert game states to a tensor. These are the inputs to the network.
-        state_tensors = torch.tensor([item[0] for item in self.bid_memory], dtype=torch.float).to(device)
+        bid_prediction_tensor_state = torch.tensor([item[0] for item in self.bid_memory], dtype=torch.float).to(device)
 
         # Convert the bids made by the bot to a tensor. These will be used to compute the loss.
         # The bids are adjusted by subtracting 1 to align with the network's output indexing.
-        bid_tensors = torch.tensor([item[1] - 1 for item in self.bid_memory], dtype=torch.long).to(device)
+        ground_truth_bid_tensors_state = torch.tensor([item[1] for item in self.bid_memory], dtype=torch.float).to(device)
 
         # Convert the rewards to a tensor. These are not directly used in this training step but could be useful for advanced training techniques.
         reward_tensors = torch.tensor([item[2] for item in self.bid_memory], dtype=torch.float).to(device)
 
         # Perform a forward pass through the network.
         # This computes the predicted bid probabilities based on the game states.
-        predicted_bid_probabilities = self.bid_net(state_tensors)
+        predicted_bid_probabilities = self.bid_net.forward(bid_prediction_tensor_state)
+        ground_truth_bid = self.bid_net.forward(ground_truth_bid_tensors_state)
         print(f'Predicted bid probability is: {predicted_bid_probabilities}')
-        print(f'Bid tensors: {bid_tensors}')
+        print(f'Ground truth probability: {ground_truth_bid_tensors_state}')
+
+
 
 
         # Compute the loss using CrossEntropyLoss.
@@ -656,7 +676,7 @@ class BotPlayer(Player):
 
         # Compute loss using CrossEntropyLoss for multi-class classification
         loss_function = torch.nn.CrossEntropyLoss()
-        loss = loss_function(predicted_bid_probabilities, bid_tensors)
+        loss = loss_function(predicted_bid_probabilities, ground_truth_bid)
 
 
         # Print the calculated loss for monitoring. This helps in understanding how well the network is performing and
@@ -869,6 +889,8 @@ def assign_teams(players):
 
     return team1, team2
 
+
+
 # Main game loop function
 def main_game_loop(players, game_parameters, dealer, deck):
 
@@ -896,6 +918,7 @@ def main_game_loop(players, game_parameters, dealer, deck):
         # Set the game_over variable to false so we can enter the while not game_over loop
         game_over = False
 
+
         # Resets the reward variable to 0. The code increases this value as the game is played based on the performance
         # of the bot.
         total_reward = 0
@@ -903,16 +926,33 @@ def main_game_loop(players, game_parameters, dealer, deck):
         while not game_over:
             # Informative print statement to observe progress during training
             print(f'Current episode: {episode}')
+            for outer_player in players:
+                outer_player.reset_bid()
+
 
             # The outer layer of a nested for loop. This for loop takes some action for all of the players of the game
             for outer_player in players:
-                # Vectorize the game state before the bots make a decision
-                game_state_and_player_vector = vectorize_game_state(game_over, scoreboard, current_bids, team1_tricks,
-                             team2_tricks, 0, outer_player, players)
+
+               # Vectorize the game state before the bots make a decision
+                game_state_and_player_vector = vectorize_game_state(game_over,
+                                                                    scoreboard,
+                                                                    current_bids,
+                                                                    team1_tricks,
+                                                                    team2_tricks,
+                                                                    0,
+                                                                    outer_player,
+                                                                    players)
+
                 # Vectorize is happening here again, the name of the variable is altered. I'm not sure why this happens
                 # two times.
-                bid_game_state_and_player_vector = vectorize_game_state(game_over, scoreboard, current_bids, team1_tricks,
-                                     team2_tricks, 0, outer_player, players)
+                bid_game_state_and_player_vector = vectorize_game_state(game_over,
+                                                                    scoreboard,
+                                                                    current_bids,
+                                                                    team1_tricks,
+                                                                    team2_tricks,
+                                                                    0,
+                                                                    outer_player,
+                                                                    players)
 
                 # The players, one at a time, make a bid. If its a bot, the bot should use the vectorized game state
                 # As an input to instruct what the NN should decide. make_bid method should be deeply scrutinized.
@@ -933,6 +973,7 @@ def main_game_loop(players, game_parameters, dealer, deck):
                 else:
                     game_over = True
                     break
+
             # Adds the bids of all players on Team 1
             team1_total_bid = sum(current_bids[outer_player.name]
                                   for outer_player in players if outer_player.team == "Team 1")
@@ -980,10 +1021,22 @@ def main_game_loop(players, game_parameters, dealer, deck):
                         inner_player.determine_eligible_cards(game_parameters.leading_suit, game_parameters.spades_broken)
 
                     # Vectorize the game state before the bots make a decision
-                    game_state_and_player_vector = vectorize_game_state(game_over, scoreboard, current_bids, team1_tricks,
-                                                                        team2_tricks, 0, inner_player, players)
-                    outer_game_state_and_player_vector = vectorize_game_state(game_over, scoreboard, current_bids, team1_tricks,
-                                                                        team2_tricks, 0, inner_player, players)
+                    game_state_and_player_vector = vectorize_game_state(game_over,
+                                                                    scoreboard,
+                                                                    current_bids,
+                                                                    team1_tricks,
+                                                                    team2_tricks,
+                                                                    0,
+                                                                    outer_player,
+                                                                    players)
+                    outer_game_state_and_player_vector = vectorize_game_state(game_over,
+                                                                    scoreboard,
+                                                                    current_bids,
+                                                                    team1_tricks,
+                                                                    team2_tricks,
+                                                                    0,
+                                                                    outer_player,
+                                                                    players)
                     # The player choses a card. For the bots, they accept the vectorized game state as an input to their
                     # card decision
                     card_played = inner_player.play_card(game_parameters.leading_suit, game_parameters.spades_broken,
@@ -1012,6 +1065,11 @@ def main_game_loop(players, game_parameters, dealer, deck):
                 # Notice indentation. This means that upon completion of the for loop, look through the hand that was
                 # played and determine which player and card won the hand
                 winning_card = determine_winning_card_and_team(current_hand)
+                # players[0].check_if_i_won(winning_card[0].name)
+                # players[1].check_if_i_won(winning_card[0].name)
+                # players[2].check_if_i_won(winning_card[0].name)
+                # players[3].check_if_i_won(winning_card[0].name)
+
 
                 # These are diagnostic print statements that allow the observer to see whats happening during training.
                 print(f"Winning card is {winning_card[1]}. Winning player is {winning_card[0].name}."
@@ -1041,6 +1099,14 @@ def main_game_loop(players, game_parameters, dealer, deck):
 
                 # Reset the leading suit for the next hand
                 game_parameters.leading_suit = None
+            ground_truth_vector = vectorize_game_state_ground_truth(game_over,
+                                              scoreboard,
+                                              current_bids,
+                                              team1_tricks,
+                                              team2_tricks,
+                                              0,
+                                              outer_player,
+                                              players)
 
             # Rotate the dealer for the next hand
             dealer = rotate_dealer(players, dealer)
@@ -1048,8 +1114,10 @@ def main_game_loop(players, game_parameters, dealer, deck):
             game_parameters.spades_broken = False
 
             # Calculate and update scores after 13 hands
-            team1_score, team2_score = scoreboard.calculate_score(game_parameters.get_team1_bid(), game_parameters.get_team2_bid(),
-                                                                  team1_tricks, team2_tricks)
+            team1_score, team2_score = scoreboard.calculate_score(game_parameters.get_team1_bid(),
+                                                                  game_parameters.get_team2_bid(),
+                                                                  team1_tricks,
+                                                                  team2_tricks)
 
             # Diagnostic print statements showing the user the state of the game
             print(f"Game Score - Team 1: {scoreboard.team1_overall_score}, Team 2: {scoreboard.team2_overall_score}")
@@ -1067,7 +1135,9 @@ def main_game_loop(players, game_parameters, dealer, deck):
                                             team1_score,
                                             scoreboard.team1_overall_score,
                                             (len(team1_tricks) / 4),
-                                            team1_total_bid)
+                                            team1_total_bid,
+                                            ground_truth_vector
+                                            )
 
                 elif outer_player.team == 'Team 2':
                     # Apply reward function for bots on team 2
@@ -1076,7 +1146,9 @@ def main_game_loop(players, game_parameters, dealer, deck):
                                             team2_score,
                                             scoreboard.team2_overall_score,
                                             (len(team2_tricks) / 4),
-                                            team2_total_bid)
+                                            team2_total_bid,
+                                            ground_truth_vector
+                                            )
                 else:
                     # Catch all section of code for unlikely event that the bot is not on team 1 or team 2
                     print(f"Team not recognized for {outer_player.name}.")
@@ -1154,7 +1226,9 @@ def vectorize_game_state(game_over, scoreboard, current_bids, team1_tricks,
     #print(game_over_vector)
 
     # Vectorizing current bids
-    bids_vector = [current_bids.get(p.name, 0) for p in players]  # Assuming 'players' is accessible
+    bids_vector = [players[0].bid_i_made,players[1].bid_i_made,players[2].bid_i_made,players[3].bid_i_made]
+    print(f'\nThis prints bids vector: {bids_vector}\n')
+    #time.sleep(.5)
     #print(game_over_vector)
 
     # Vectorizing team tricks
@@ -1176,7 +1250,45 @@ def vectorize_game_state(game_over, scoreboard, current_bids, team1_tricks,
 
     return game_state_vector
 
+def vectorize_game_state_ground_truth(game_over, scoreboard, current_bids, team1_tricks,
+                         team2_tricks, current_round_number, player, players):
 
+
+    # Vectorizing game_over
+    game_over_vector = [1 if game_over else 0]
+    #print(game_over_vector)
+
+    # Vectorizing scoreboard
+    scoreboard_vector = [scoreboard.team1_overall_score, scoreboard.team2_overall_score, scoreboard.round_number]
+    #print(game_over_vector)
+
+    # Vectorizing current bids
+    bids_vector = [players[0].won_hands,players[1].won_hands,players[2].won_hands,players[3].won_hands]
+    print("bid made: ")
+    print([players[0].bid_i_made,players[1].bid_i_made,players[2].bid_i_made,players[3].bid_i_made])
+    print("actual winnings: ")
+    print([players[0].won_hands, players[1].won_hands, players[2].won_hands, players[3].won_hands])
+
+    #print(game_over_vector)
+
+    # Vectorizing team tricks
+    team_tricks_vector = [(len(team1_tricks) / 4), (len(team2_tricks)/ 4)]
+    #print(game_over_vector)
+
+    # Vectorizing current hand
+    current_round_number_vector = one_hot_encode_round(current_round_number)
+    #print(game_over_vector)
+
+    # Vectorizing player's perspective
+    player_vector = player.vectorize_player()
+   # print(game_over_vector)
+
+    # Combine all vectors into a single game state vector
+    game_state_vector = game_over_vector + scoreboard_vector +\
+                        bids_vector + team_tricks_vector + player_vector + current_round_number_vector
+    #print(game_over_vector)
+
+    return game_state_vector
 
 # Main function to start the game
 def main():
