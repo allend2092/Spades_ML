@@ -1,8 +1,13 @@
 """
 Author: Daryl
 
-This is a text based game of spades. As of Dec 17th, 2023 this version does work and allow the user to play through multiple hands, make a bid and has functional AI. This is the foundation for a deep learning neural net project.
-I built this game so I could train the AI players using deep learning with an Nvidia GPU. I had some assistance writing this code using chatGPT
+This is a text based game of spades. As of Jan 17th, 2023 this version does work in terms of game flow. Based on my
+observations, the NN I've prepared does not converge to any kind of strategey that will win the game. I think my problem
+is the lack of focus on creating a consistent vector for inference and training. In future versions, improving the
+vectorize process will be the main focus so I can achieve a consistent training signal. 
+
+On the positive side, I have added a significant amount of notes, annotation, and code comments. It should be easy to
+pick up this problem in the future. Now I am back to work.
 
 """
 
@@ -16,49 +21,27 @@ import time
 
 class BidNet(nn.Module):
     def __init__(self):
-        # Initialize the BidNet class as a subclass of nn.Module
         super(BidNet, self).__init__()
 
-        # Define the first fully connected (fc) layer.
-        # It takes an input with a size of 51 (in_features=51), which should match the size of your input vector.
-        # It outputs a tensor with a size of 128 (out_features=128). This is a hyperparameter and can be adjusted.
-        self.fc1 = nn.Linear(in_features=51, out_features=128)
-        # Define additional fully connected layers.
-        # Each subsequent layer takes the output of the previous layer as its input.
-        # The number of output features gradually decreases, which is a common design in deep networks.
-        self.fc2 = nn.Linear(128, 120)
-        self.fc3 = nn.Linear(120, 110)
-        self.fc4 = nn.Linear(110, 100)
-        self.fc5 = nn.Linear(100, 90)
-        self.fc6 = nn.Linear(90, 80)
-        self.fc7 = nn.Linear(80, 70)
-        self.fc8 = nn.Linear(70, 60)
-        self.fc9 = nn.Linear(60, 50)
+        # First fully connected layer
+        self.fc1 = nn.Linear(in_features=32, out_features=128)
 
-        # The final layer (fc10) is the output layer of the network.
-        # It outputs 13 features, corresponding to each possible bid (assuming there are 13 possible bids).
-        self.fc10 = nn.Linear(50, 13)
+        # Second fully connected layer
+        self.fc2 = nn.Linear(128, 64)  # Adjust the number of features as needed
+
+        # Output layer
+        self.fc3 = nn.Linear(64, 13)  # Assuming 13 possible bids
 
     def forward(self, x):
-        # The forward method defines the data flow through the network.
-
-        # Input x is passed through each layer in sequence.
-        # The ReLU (Rectified Linear Unit) activation function is applied after each layer except the last one.
-        # ReLU introduces non-linearity, allowing the network to learn more complex patterns.
+        # Pass input through the first layer and apply ReLU activation
         x = F.relu(self.fc1(x))
+
+        # Pass through the second layer and apply ReLU activation
         x = F.relu(self.fc2(x))
-        x = F.relu(self.fc3(x))
-        x = F.relu(self.fc4(x))
-        x = F.relu(self.fc5(x))
-        x = F.relu(self.fc6(x))
-        x = F.relu(self.fc7(x))
-        x = F.relu(self.fc8(x))
-        x = F.relu(self.fc9(x))
-        # The output of the last layer (fc10) is the raw scores for each class (possible bid).
+
+        # Pass through the output layer
         # No activation function like softmax is applied here; this implies that the raw scores are used.
-        # In a classification context, these scores are often passed through a softmax function
-        # outside the network to turn them into probabilities.
-        x = self.fc10(x)
+        x = self.fc3(x)
 
         return x
 
@@ -77,50 +60,31 @@ class PlayCardNet(nn.Module):
     def __init__(self):
         super(PlayCardNet, self).__init__()
 
-        # Define the layers of the neural network.
-        # Each layer is a fully connected (linear) layer.
-
-        # First layer: Takes an input with a size of 51 (size of your input vector).
+        # First layer: Takes an input with a size of 34 (size of your input vector).
         # Outputs a tensor with a size of 128. This is the first hidden layer.
-        self.fc1 = nn.Linear(51, 128)
+        self.fc1 = nn.Linear(32, 128)
 
-        # Subsequent layers: Each takes the output of the previous layer as input
-        # and outputs a tensor with a reduced size. This gradual reduction helps in
-        # abstracting and compressing the information through the network.
-        self.fc2 = nn.Linear(128, 120)
-        self.fc3 = nn.Linear(120, 110)
-        self.fc4 = nn.Linear(110, 100)
-        self.fc5 = nn.Linear(100, 90)
-        self.fc6 = nn.Linear(90, 80)
-        self.fc7 = nn.Linear(80, 70)
-        self.fc8 = nn.Linear(70, 60)
-        self.fc9 = nn.Linear(60, 50)
+        # Intermediate layer: Takes the output of the first layer as input
+        # and outputs a tensor with a reduced size.
+        self.fc2 = nn.Linear(128, 64)  # Adjust the number of features as needed
 
         # Final layer: This is the output layer of the network.
-        # It takes the 50 features from the ninth layer as input.
+        # It takes the features from the intermediate layer as input.
         # Outputs 13 features, corresponding to each card in hand (assuming there are 13 cards).
-        # This layer will use a softmax activation function in the forward method.
-        self.fc10 = nn.Linear(50, 13)
+        self.fc3 = nn.Linear(64, 13)
 
     def forward(self, x):
         # The forward method defines the data flow through the network.
-        # Input x is passed through each layer, and the ReLU (Rectified Linear Unit) activation function is applied.
-        # ReLU introduces non-linearity, allowing the network to learn more complex patterns.
 
-        x = F.relu(self.fc1(x))  # Pass input through the first layer, then apply ReLU
-        x = F.relu(self.fc2(x))  # Pass through the second layer, then apply ReLU
-        x = F.relu(self.fc3(x))  # Continue this pattern for subsequent layers
-        x = F.relu(self.fc4(x))
-        x = F.relu(self.fc5(x))
-        x = F.relu(self.fc6(x))
-        x = F.relu(self.fc7(x))
-        x = F.relu(self.fc8(x))
-        x = F.relu(self.fc9(x))
+        # Pass input through the first layer and apply ReLU activation
+        x = F.relu(self.fc1(x))
+
+        # Pass through the intermediate layer and apply ReLU activation
+        x = F.relu(self.fc2(x))
 
         # The final layer's output is passed through a softmax function.
         # Softmax turns the raw scores into probabilities, which is useful for classification tasks.
-        # The 'dim=1' argument specifies that the softmax should be applied to each row (each sample).
-        x = F.softmax(self.fc10(x), dim=1)
+        x = F.softmax(self.fc3(x), dim=1)
 
         return x
 
@@ -300,6 +264,11 @@ class Player:
         self.won_hands = 0
         self.bid_i_made = 0
 
+    def copy_cards_for_learning_vector(self):
+        new_list = list(self.hand)
+        self.previous_hand = new_list[:]
+
+
     def reset_bid(self):
         self.bid_i_made = 0
 
@@ -383,21 +352,14 @@ class Player:
 
         # Convert hand to numbers (assuming a function card_to_number exists)
         hand_vector = self.vectorize_hand()
-        #print(hand_vector)
         vector.extend(hand_vector)
 
         # Add score
         vector.append(self.score)
-        #print(self.score)
-
-        # Convert last played card to a number
-        # last_card_number = self.card_to_number(self.card_played_last) if self.card_played_last else -1
-        # vector.append(last_card_number)
 
         # Convert eligible cards to numbers
         eligible_cards_vector = self.vectorize_eligible_cards()
         vector.extend(eligible_cards_vector)
-        #print(eligible_cards_vector)
 
         return vector
 
@@ -521,7 +483,7 @@ class BotPlayer(Player):
         self.reward = 0
         self.memory = []
         self.bid_memory = []
-        self.optimizer = torch.optim.Adam(self.play_card_net.parameters(), lr=0.001)
+        self.optimizer = torch.optim.Adam(self.play_card_net.parameters(), lr=0.1)
         # Check for existing model and load it
         self.load_model_if_exists()
         self.last_played_of_my_hand_card_index = None
@@ -646,6 +608,8 @@ class BotPlayer(Player):
         if len(self.bid_memory) < 1:
             return
 
+        print(f'bid memory00: {self.bid_memory[0][0]}')
+        print(f'bid memory01: {self.bid_memory[0][1]}')
         # Convert the collected game states, bids, and rewards from the memory into PyTorch tensors.
         # This is necessary for processing the data with the neural network.
 
@@ -655,16 +619,19 @@ class BotPlayer(Player):
         # Convert the bids made by the bot to a tensor. These will be used to compute the loss.
         # The bids are adjusted by subtracting 1 to align with the network's output indexing.
         ground_truth_bid_tensors_state = torch.tensor([item[1] for item in self.bid_memory], dtype=torch.float).to(device)
+        print(f'Predicted bid probability is: {bid_prediction_tensor_state}')
+        print(f'Ground truth probability: {ground_truth_bid_tensors_state}')
 
-        # Convert the rewards to a tensor. These are not directly used in this training step but could be useful for advanced training techniques.
-        reward_tensors = torch.tensor([item[2] for item in self.bid_memory], dtype=torch.float).to(device)
+        # Convert the rewards to a tensor. These are not directly used in this
+        # training step but could be useful for advanced training techniques.
+        # reward_tensors = torch.tensor([item[2] for item in self.bid_memory], dtype=torch.float).to(device)
 
         # Perform a forward pass through the network.
         # This computes the predicted bid probabilities based on the game states.
         predicted_bid_probabilities = self.bid_net.forward(bid_prediction_tensor_state)
         ground_truth_bid = self.bid_net.forward(ground_truth_bid_tensors_state)
         print(f'Predicted bid probability is: {predicted_bid_probabilities}')
-        print(f'Ground truth probability: {ground_truth_bid_tensors_state}')
+        print(f'Ground truth probability: {ground_truth_bid}')
 
 
 
@@ -897,7 +864,7 @@ def main_game_loop(players, game_parameters, dealer, deck):
     # This variable is used during the machine learning phase. This integer specifies how many game loops will occur
     # One game loop happens when a team reaches the upper or lower point boundry.
     # For reference, with GPU, I've seen 7,000 games be played when left to run over night.
-    num_episodes = 7000
+    num_episodes = 100
 
     # This dictionary inializes here to keep track of each players bid
     current_bids = {}
@@ -928,12 +895,15 @@ def main_game_loop(players, game_parameters, dealer, deck):
             print(f'Current episode: {episode}')
             for outer_player in players:
                 outer_player.reset_bid()
+                #outer_player.copy_cards_for_learning_vector()
+
+
 
 
             # The outer layer of a nested for loop. This for loop takes some action for all of the players of the game
             for outer_player in players:
 
-               # Vectorize the game state before the bots make a decision
+               # different vectors are needed for different networks. This is for the play card network.
                 game_state_and_player_vector = vectorize_game_state(game_over,
                                                                     scoreboard,
                                                                     current_bids,
@@ -943,8 +913,7 @@ def main_game_loop(players, game_parameters, dealer, deck):
                                                                     outer_player,
                                                                     players)
 
-                # Vectorize is happening here again, the name of the variable is altered. I'm not sure why this happens
-                # two times.
+               # different vectors are needed for different networks. This is for the bid card network.
                 bid_game_state_and_player_vector = vectorize_game_state(game_over,
                                                                     scoreboard,
                                                                     current_bids,
@@ -1099,14 +1068,9 @@ def main_game_loop(players, game_parameters, dealer, deck):
 
                 # Reset the leading suit for the next hand
                 game_parameters.leading_suit = None
-            ground_truth_vector = vectorize_game_state_ground_truth(game_over,
-                                              scoreboard,
-                                              current_bids,
-                                              team1_tricks,
-                                              team2_tricks,
-                                              0,
-                                              outer_player,
-                                              players)
+                #
+            ground_truth_vector = vectorize_game_state_ground_truth(bid_game_state_and_player_vector, players)
+
 
             # Rotate the dealer for the next hand
             dealer = rotate_dealer(players, dealer)
@@ -1218,84 +1182,58 @@ def one_hot_encode_round(current_round_number):
 def vectorize_game_state(game_over, scoreboard, current_bids, team1_tricks,
                          team2_tricks, current_round_number, player, players):
     # Vectorizing game_over
-    game_over_vector = [1 if game_over else 0]
-    #print(game_over_vector)
+    # game_over_vector = [1 if game_over else 0]
+    # print(game_over_vector)
 
     # Vectorizing scoreboard
-    scoreboard_vector = [scoreboard.team1_overall_score, scoreboard.team2_overall_score, scoreboard.round_number]
-    #print(game_over_vector)
+    # scoreboard_vector = [scoreboard.team1_overall_score, scoreboard.team2_overall_score, scoreboard.round_number]
+    # print(scoreboard_vector)
 
     # Vectorizing current bids
     bids_vector = [players[0].bid_i_made,players[1].bid_i_made,players[2].bid_i_made,players[3].bid_i_made]
-    print(f'\nThis prints bids vector: {bids_vector}\n')
-    #time.sleep(.5)
-    #print(game_over_vector)
+    print(bids_vector)
 
     # Vectorizing team tricks
     team_tricks_vector = [(len(team1_tricks) / 4), (len(team2_tricks)/ 4)]
-    #print(game_over_vector)
+    print(team_tricks_vector)
 
     # Vectorizing current hand
-    current_round_number_vector = one_hot_encode_round(current_round_number)
-    #print(game_over_vector)
+    #current_round_number_vector = one_hot_encode_round(current_round_number)
+    #print(f'One Hot encode: {current_round_number_vector}')
 
     # Vectorizing player's perspective
     player_vector = player.vectorize_player()
-   # print(game_over_vector)
+    print(player_vector)
 
     # Combine all vectors into a single game state vector
-    game_state_vector = game_over_vector + scoreboard_vector +\
-                        bids_vector + team_tricks_vector + player_vector + current_round_number_vector
-    #print(game_over_vector)
+    game_state_vector = bids_vector + player_vector #+ current_round_number_vector + game_over_vector
+    # scoreboard_vector + + team_tricks_vector
+    print(game_state_vector)
 
     return game_state_vector
 
-def vectorize_game_state_ground_truth(game_over, scoreboard, current_bids, team1_tricks,
-                         team2_tricks, current_round_number, player, players):
-
-
-    # Vectorizing game_over
-    game_over_vector = [1 if game_over else 0]
-    #print(game_over_vector)
-
-    # Vectorizing scoreboard
-    scoreboard_vector = [scoreboard.team1_overall_score, scoreboard.team2_overall_score, scoreboard.round_number]
-    #print(game_over_vector)
+def vectorize_game_state_ground_truth(existing_vector, players):
+    new_vector = list(existing_vector)
 
     # Vectorizing current bids
-    bids_vector = [players[0].won_hands,players[1].won_hands,players[2].won_hands,players[3].won_hands]
-    print("bid made: ")
-    print([players[0].bid_i_made,players[1].bid_i_made,players[2].bid_i_made,players[3].bid_i_made])
-    print("actual winnings: ")
-    print([players[0].won_hands, players[1].won_hands, players[2].won_hands, players[3].won_hands])
+    new_vector[0] = players[0].won_hands
+    new_vector[1] = players[1].won_hands
+    new_vector[2] = players[2].won_hands
+    new_vector[3] = players[3].won_hands
+    #print("bid made: ")
+    #print([players[0].bid_i_made,players[1].bid_i_made,players[2].bid_i_made,players[3].bid_i_made])
+    #print("actual winnings: ")
+    #print([players[0].won_hands, players[1].won_hands, players[2].won_hands, players[3].won_hands])
+    print(f'Ground Truth:{new_vector}')
 
-    #print(game_over_vector)
-
-    # Vectorizing team tricks
-    team_tricks_vector = [(len(team1_tricks) / 4), (len(team2_tricks)/ 4)]
-    #print(game_over_vector)
-
-    # Vectorizing current hand
-    current_round_number_vector = one_hot_encode_round(current_round_number)
-    #print(game_over_vector)
-
-    # Vectorizing player's perspective
-    player_vector = player.vectorize_player()
-   # print(game_over_vector)
-
-    # Combine all vectors into a single game state vector
-    game_state_vector = game_over_vector + scoreboard_vector +\
-                        bids_vector + team_tricks_vector + player_vector + current_round_number_vector
-    #print(game_over_vector)
-
-    return game_state_vector
+    return new_vector
 
 # Main function to start the game
 def main():
 
     # Set intial game conditions
     human_players = 0 # Set players to 0 for bot training
-    points = 50  # The team that scores this many points will win. -1,000 points causes team to lose
+    points = 200  # The team that scores this many points will win. -1,000 points causes team to lose
 
     # Displays some ascii art displaying welcome for the user
     welcome()
@@ -1306,7 +1244,6 @@ def main():
     # This is a custom class I made to track game state, such as score, number of players, bids, etc.
     game_parameters = game_conditions(human_players=human_players, bot_players=4 - human_players,
                                           winning_score=points)
-
     # Create a card deck object
     deck = CardDeck()
 
