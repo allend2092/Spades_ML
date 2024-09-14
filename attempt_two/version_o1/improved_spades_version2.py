@@ -3,6 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import os
+import keyboard
 
 
 def print_gpu_usage():
@@ -372,7 +373,17 @@ def main():
     scoreboard = Scoreboard()
     game_over = False
     print_gpu_usage()
+
     while not game_over:
+        # Detect if 'q' has been pressed for graceful exit
+        if keyboard.is_pressed('q'):
+            print("Gracefully exiting the game...")
+            # Save all models before exiting
+            for player in players:
+                if player.bot:
+                    player.save_models()
+            exit(0)  # Gracefully exit the program
+
         deck = CardDeck()
         deck.shuffle_cards()
         print(f"Starting new round...")
@@ -406,24 +417,41 @@ def main():
             winning_player = winning_play[0]
             winning_player.won_tricks += 1
             team_tricks[winning_player.team] += 1
+            print(f"{winning_player.name} won the trick with {winning_play[1]}")
             # Rotate players so the winner leads next
             winner_index = players.index(winning_player)
             players = players[winner_index:] + players[:winner_index]
+
+        # Print end of round summary
+        print("\nEnd of round summary:")
+
+        # Display which bots are on which team
+        team1_bots = [player.name for player in team1 if player.bot]
+        team2_bots = [player.name for player in team2 if player.bot]
+
+        print(f"Team 1: {', '.join(team1_bots)}")
+        print(f"Team 2: {', '.join(team2_bots)}")
+
+        for player in players:
+            print(f"{player.name} bid {player.bid} and won {player.won_tricks} tricks.")
+
         # Calculate scores
         team1_tricks_won = sum(player.won_tricks for player in team1)
         team2_tricks_won = sum(player.won_tricks for player in team2)
         team1_score, team2_score = scoreboard.calculate_score(team1_bid, team2_bid, team1_tricks_won, team2_tricks_won)
         print(f"Team 1 Score: {scoreboard.team1_overall_score}")
         print(f"Team 2 Score: {scoreboard.team2_overall_score}")
+
         # Update rewards and train bots
         for player in players:
             if player.bot:
                 player.update_rewards()
                 player.train()
                 player.save_models()
+
         # Check for winning or losing conditions
         if (scoreboard.team1_overall_score >= winning_score or scoreboard.team2_overall_score >= winning_score) or \
-           (scoreboard.team1_overall_score <= losing_score or scoreboard.team2_overall_score <= losing_score):
+                (scoreboard.team1_overall_score <= losing_score or scoreboard.team2_overall_score <= losing_score):
             game_over = True
             print("Game Over")
             if scoreboard.team1_overall_score > scoreboard.team2_overall_score:
@@ -436,9 +464,9 @@ def main():
                 player.hand = []
                 player.won_tricks = 0
                 player.bid = 0
-            # Optionally, you can set game_over = False to let the bots keep playing indefinitely
             game_over = False  # Uncomment this line if you want continuous training
         print_gpu_usage()
+
 
 # Run the main function to start the game
 if __name__ == "__main__":
